@@ -1,0 +1,6 @@
+{
+  "region": "eu-central-1",
+  "dynamo":{
+    "table":"polls"
+  }
+}
