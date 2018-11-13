@@ -2,6 +2,7 @@ package repository
 
 import (
 	"sync"
+	"time"
 
 	"vote-bot/repository/internal/dynamo"
 
@@ -15,7 +16,8 @@ const (
 )
 
 var (
-	ErrPollIsNotFound = errors.New("poll is not found")
+	ErrPollIsNotFound   = errors.New("poll is not found")
+	ErrPollAlreadyExist = errors.New("poll already exist")
 )
 
 type Repository struct {
@@ -30,6 +32,10 @@ func New(region, tableName string) (*Repository, error) {
 	}
 
 	return &Repository{db: db}, nil
+}
+
+func (r *Repository) CreateTable() error {
+	return r.db.CreateTable()
 }
 
 func (r *Repository) DescribeTable() (string, error) {
@@ -52,21 +58,30 @@ func (r *Repository) GetPoll(pollName string) (*Poll, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	item, err := r.db.GetPoll(pollName)
+	return r.getPoll(pollName)
+}
+
+func (r *Repository) CreatePoll(pollName string, items []string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	storedPoll, err := r.getPoll(pollName)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get a poll by name")
+		return errors.Wrap(err, "create poll failed")
 	}
 
-	if item == nil || item.Item == nil || len(item.Item) == 0 {
-		return nil, ErrPollIsNotFound
+	if storedPoll != nil {
+		return ErrPollAlreadyExist
 	}
 
-	poll := new(Poll)
-	if err := dynamodbattribute.UnmarshalMap(item.Item, poll); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal item")
+	poll := &Poll{
+		CreatedAt: time.Now().UnixNano(),
+		Subject:   pollName,
+		Items:     items,
+		Kind:      dynamo.PollKind,
 	}
 
-	return poll, nil
+	return r.db.CreatePoll(poll)
 }
 
 func (r Repository) convertMapToPoll(items ...map[string]*dynamodb.AttributeValue) ([]*Poll, error) {
@@ -82,4 +97,22 @@ func (r Repository) convertMapToPoll(items ...map[string]*dynamodb.AttributeValu
 	}
 
 	return polls, nil
+}
+
+func (r Repository) getPoll(pollName string) (*Poll, error) {
+	item, err := r.db.GetPoll(pollName)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get a poll by name")
+	}
+
+	if item == nil || item.Items == nil || len(item.Items) == 0 {
+		return nil, ErrPollIsNotFound
+	}
+
+	poll := new(Poll)
+	if err := dynamodbattribute.UnmarshalMap(item.Items[0], poll); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal item")
+	}
+
+	return poll, nil
 }

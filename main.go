@@ -4,6 +4,12 @@ import (
 	"log"
 	cfg "vote-bot/config"
 	"vote-bot/repository"
+
+	"github.com/pkg/errors"
+
+	"github.com/aws/aws-sdk-go/service/dynamodb"
+
+	"github.com/aws/aws-sdk-go/aws/awserr"
 )
 
 const (
@@ -132,21 +138,35 @@ func main() {
 		return
 	}
 
-	polls, err := repo.GetPolls()
+	desc, err := repo.DescribeTable()
 	if err != nil {
-		log.Printf("can't get polls: %s", err)
-		return
+		if aerr, ok := errors.Cause(err).(awserr.Error); ok {
+			switch aerr.Code() {
+			case dynamodb.ErrCodeResourceNotFoundException:
+				log.Printf("create table error: %s", repo.CreateTable())
+			}
+		} else {
+			log.Println(err)
+			return
+		}
 	}
 
-	for _, poll := range polls {
-		log.Printf("data: %+v", *poll)
-	}
+	log.Printf("desc: %+v", desc)
 
-	resp, err := repo.DescribeTable()
-	if err != nil {
-		log.Println(err)
-		return
-	}
+	// polls, err := repo.GetPolls()
+	// if err != nil {
+	// 	log.Printf("can't get polls: %s", err)
+	// 	return
+	// }
+	//
+	// for _, poll := range polls {
+	// 	log.Printf("data: %+v", *poll)
+	// }
 
-	log.Println("description:", resp)
+	// err = repo.CreatePoll("test", []string{"1", "2"})
+	// if err != nil {
+	// 	log.Printf("poll created failed: %s", err)
+	// 	return
+	// }
+	// log.Println("poll created")
 }

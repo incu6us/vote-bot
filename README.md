@@ -26,3 +26,27 @@ Telegram bot for voting based on AWS serverless engines
   }
 }
 ```
+
+```json
+{
+  "created_at": {
+    "N": "1542129390866608000"
+  },
+  "items": {
+    "L": [
+      {
+        "S": "yes"
+      },
+      {
+        "S": "no"
+      }
+    ]
+  },
+  "kind": {
+    "S": "poll"
+  },
+  "subject": {
+    "S": "test poll"
+  }
+}
+```
