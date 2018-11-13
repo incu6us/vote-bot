@@ -141,4 +141,12 @@ func main() {
 	for _, poll := range polls {
 		log.Printf("data: %+v", *poll)
 	}
+
+	resp, err := repo.DescribeTable()
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	log.Println("description:", resp)
 }

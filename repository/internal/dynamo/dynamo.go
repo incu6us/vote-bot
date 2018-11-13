@@ -37,6 +37,15 @@ func New(region, tableName string) (*DB, error) {
 	return &DB{tableName: tableName, client: dynamodb.New(sess)}, nil
 }
 
+func (db DB) DescribeTable() (string, error) {
+	result, err := db.client.DescribeTable(&dynamodb.DescribeTableInput{TableName: aws.String(db.tableName)})
+	if err != nil {
+		return "", errors.Wrap(err, "feiled to get table description")
+	}
+
+	return result.String(), nil
+}
+
 func (db DB) GetPolls(limitRows int64) (*dynamodb.QueryOutput, error) {
 	if limitRows == 0 {
 		return nil, ErrBadLimit

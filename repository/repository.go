@@ -32,6 +32,10 @@ func New(region, tableName string) (*Repository, error) {
 	return &Repository{db: db}, nil
 }
 
+func (r *Repository) DescribeTable() (string, error) {
+	return r.db.DescribeTable()
+}
+
 func (r *Repository) GetPolls() ([]*Poll, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
