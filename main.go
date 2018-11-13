@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	cfg "vote-bot/config"
+	"vote-bot/repository"
 )
 
 const (
@@ -125,4 +126,19 @@ func main() {
 	// }
 	// log.Printf("DATA: %+v", result)
 
+	repo, err := repository.New(region, tableName)
+	if err != nil {
+		log.Printf("failed to initiate repository: %s", err)
+		return
+	}
+
+	polls, err := repo.GetPolls()
+	if err != nil {
+		log.Printf("can't get polls: %s", err)
+		return
+	}
+
+	for _, poll := range polls {
+		log.Printf("data: %+v", *poll)
+	}
 }
