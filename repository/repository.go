@@ -61,7 +61,7 @@ func (r *Repository) GetPoll(pollName string) (*Poll, error) {
 	return r.getPoll(pollName)
 }
 
-func (r *Repository) CreatePoll(pollName string, items []string) error {
+func (r *Repository) CreatePoll(pollName, owner string, items []string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -78,7 +78,7 @@ func (r *Repository) CreatePoll(pollName string, items []string) error {
 		CreatedAt: time.Now().UnixNano(),
 		Subject:   pollName,
 		Items:     items,
-		Kind:      dynamo.PollKind,
+		Owner:     owner,
 	}
 
 	return r.db.CreatePoll(poll)

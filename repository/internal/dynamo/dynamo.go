@@ -2,8 +2,6 @@ package dynamo
 
 import (
 	"fmt"
-	"strconv"
-	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -11,10 +9,6 @@ import (
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/pkg/errors"
-)
-
-const (
-	PollKind = "poll"
 )
 
 var (
@@ -42,25 +36,21 @@ func (db DB) CreateTable() error {
 	_, err := db.client.CreateTable(&dynamodb.CreateTableInput{
 		AttributeDefinitions: []*dynamodb.AttributeDefinition{
 			{
-				AttributeName: aws.String("created_at"),
-				AttributeType: aws.String("N"),
-			},
-			{
 				AttributeName: aws.String("subject"),
 				AttributeType: aws.String("S"),
 			},
 			{
-				AttributeName: aws.String("kind"),
-				AttributeType: aws.String("S"),
+				AttributeName: aws.String("created_at"),
+				AttributeType: aws.String("N"),
 			},
 		},
 		KeySchema: []*dynamodb.KeySchemaElement{
 			{
-				AttributeName: aws.String("created_at"),
+				AttributeName: aws.String("subject"),
 				KeyType:       aws.String("HASH"),
 			},
 			{
-				AttributeName: aws.String("subject"),
+				AttributeName: aws.String("created_at"),
 				KeyType:       aws.String("RANGE"),
 			},
 		},
@@ -82,31 +72,17 @@ func (db DB) DescribeTable() (string, error) {
 	return result.String(), nil
 }
 
-func (db DB) GetPolls(limitRows int64) (*dynamodb.QueryOutput, error) {
+func (db DB) GetPolls(limitRows int64) (*dynamodb.ScanOutput, error) {
 	if limitRows == 0 {
 		return nil, ErrBadLimit
 	}
 
-	result, err := db.client.Query(&dynamodb.QueryInput{
-		TableName:        aws.String(db.tableName),
-		ScanIndexForward: aws.Bool(false),
-		Limit:            aws.Int64(limitRows),
-		KeyConditions: map[string]*dynamodb.Condition{
-			"kind": {
-				ComparisonOperator: aws.String("EQ"),
-				AttributeValueList: []*dynamodb.AttributeValue{
-					{
-						S: aws.String(PollKind),
-					},
-				},
-			},
-			"created_at": {
-				ComparisonOperator: aws.String("LE"),
-				AttributeValueList: []*dynamodb.AttributeValue{
-					{
-						N: aws.String(strconv.FormatInt(time.Now().UnixNano(), 10)),
-					},
-				},
+	result, err := db.client.Scan(&dynamodb.ScanInput{
+		TableName: aws.String(db.tableName),
+		Limit:     aws.Int64(limitRows),
+		ScanFilter: map[string]*dynamodb.Condition{
+			"subject": {
+				ComparisonOperator: aws.String("NOT_NULL"),
 			},
 		},
 	})
@@ -126,11 +102,11 @@ func (db DB) GetPoll(pollName string) (*dynamodb.QueryOutput, error) {
 		TableName: aws.String(db.tableName),
 		Limit:     aws.Int64(1),
 		KeyConditions: map[string]*dynamodb.Condition{
-			"kind": {
+			"subject": {
 				ComparisonOperator: aws.String("EQ"),
 				AttributeValueList: []*dynamodb.AttributeValue{
 					{
-						S: aws.String(PollKind),
+						S: aws.String(pollName),
 					},
 				},
 			},

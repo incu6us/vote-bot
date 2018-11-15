@@ -138,12 +138,15 @@ func main() {
 		return
 	}
 
-	desc, err := repo.DescribeTable()
+	_, err = repo.DescribeTable()
 	if err != nil {
-		if aerr, ok := errors.Cause(err).(awserr.Error); ok {
-			switch aerr.Code() {
+		if awsErr, ok := errors.Cause(err).(awserr.Error); ok {
+			switch awsErr.Code() {
 			case dynamodb.ErrCodeResourceNotFoundException:
-				log.Printf("create table error: %s", repo.CreateTable())
+				if err1 := repo.CreateTable(); err != nil {
+					log.Printf("create table error: %s", err1)
+				}
+				log.Println("table created")
 			}
 		} else {
 			log.Println(err)
@@ -151,17 +154,19 @@ func main() {
 		}
 	}
 
-	log.Printf("desc: %+v", desc)
-
-	// polls, err := repo.GetPolls()
-	// if err != nil {
-	// 	log.Printf("can't get polls: %s", err)
-	// 	return
-	// }
+	// desc, _ := repo.DescribeTable()
 	//
-	// for _, poll := range polls {
-	// 	log.Printf("data: %+v", *poll)
-	// }
+	// log.Printf("desc: %+v", desc)
+
+	polls, err := repo.GetPolls()
+	if err != nil {
+		log.Printf("can't get polls: %s", err)
+		return
+	}
+	//
+	for _, poll := range polls {
+		log.Printf("data: %+v", *poll)
+	}
 
 	// err = repo.CreatePoll("test", []string{"1", "2"})
 	// if err != nil {
