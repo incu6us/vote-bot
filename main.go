@@ -158,20 +158,41 @@ func main() {
 	//
 	// log.Printf("desc: %+v", desc)
 
-	polls, err := repo.GetPolls()
-	if err != nil {
-		log.Printf("can't get polls: %s", err)
-		return
-	}
-	//
-	for _, poll := range polls {
-		log.Printf("data: %+v", *poll)
-	}
+	// polls, err := repo.GetPolls()
+	// if err != nil {
+	// 	log.Printf("can't get polls: %s", err)
+	// 	return
+	// }
+	// //
+	// for _, poll := range polls {
+	// 	log.Printf("data: %+v", *poll)
+	// }
 
-	// err = repo.CreatePoll("test", []string{"1", "2"})
+	// err = repo.CreatePoll("test", "me", []string{"1", "2"})
 	// if err != nil {
 	// 	log.Printf("poll created failed: %s", err)
 	// 	return
 	// }
 	// log.Println("poll created")
+
+	// err = repo.DeletePoll("test", "me")
+	// if err != nil {
+	// 	log.Printf("poll delete failed: %s", err)
+	// 	return
+	// }
+	// log.Println("poll deleted")
+
+	// err = repo.UpdatePollIsPublished("test1", "me", true)
+	// if err != nil {
+	// 	log.Printf("poll update failed: %s", err)
+	// 	return
+	// }
+	// log.Println("poll updated")
+
+	err = repo.UpdatePollItems("test1", "me", []string{"qw", "rt"})
+	if err != nil {
+		log.Printf("poll update failed: %s", err)
+		return
+	}
+	log.Println("poll updated")
 }

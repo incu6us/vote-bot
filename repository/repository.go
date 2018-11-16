@@ -66,7 +66,7 @@ func (r *Repository) CreatePoll(pollName, owner string, items []string) error {
 	defer r.mu.Unlock()
 
 	storedPoll, err := r.getPoll(pollName)
-	if err != nil {
+	if err != nil && errors.Cause(err) != ErrPollIsNotFound {
 		return errors.Wrap(err, "create poll failed")
 	}
 
@@ -78,10 +78,69 @@ func (r *Repository) CreatePoll(pollName, owner string, items []string) error {
 		CreatedAt: time.Now().UnixNano(),
 		Subject:   pollName,
 		Items:     items,
-		Owner:     owner,
+		CreatedBy: owner,
 	}
 
-	return r.db.CreatePoll(poll)
+	item, err := dynamodbattribute.MarshalMap(poll)
+	if err != nil {
+		return errors.Wrap(err, "filed to marshal an item")
+	}
+
+	return r.db.CreatePoll(item)
+}
+
+func (r Repository) DeletePoll(pollName, owner string) error {
+	result, err := r.db.GetPollByOwner(pollName, owner)
+	if err != nil {
+		return err
+	}
+
+	if len(result.Items) == 0 {
+		return ErrPollIsNotFound
+	}
+
+	var poll Poll
+	if err := dynamodbattribute.UnmarshalMap(result.Items[0], &poll); err != nil {
+		return err
+	}
+
+	return r.db.DeletePoll(pollName, poll.CreatedAt)
+}
+
+func (r Repository) UpdatePollIsPublished(pollName, owner string, isPublished bool) error {
+	result, err := r.db.GetPollByOwner(pollName, owner)
+	if err != nil {
+		return err
+	}
+
+	if len(result.Items) == 0 {
+		return ErrPollIsNotFound
+	}
+
+	var poll Poll
+	if err := dynamodbattribute.UnmarshalMap(result.Items[0], &poll); err != nil {
+		return err
+	}
+
+	return r.db.UpdateIsPublish(pollName, poll.CreatedAt, isPublished)
+}
+
+func (r Repository) UpdatePollItems(pollName, owner string, items []string) error {
+	result, err := r.db.GetPollByOwner(pollName, owner)
+	if err != nil {
+		return err
+	}
+
+	if len(result.Items) == 0 {
+		return ErrPollIsNotFound
+	}
+
+	var poll Poll
+	if err := dynamodbattribute.UnmarshalMap(result.Items[0], &poll); err != nil {
+		return err
+	}
+
+	return r.db.UpdateItems(pollName, poll.CreatedAt, items)
 }
 
 func (r Repository) convertMapToPoll(items ...map[string]*dynamodb.AttributeValue) ([]*Poll, error) {

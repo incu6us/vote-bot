@@ -1,13 +1,12 @@
 package dynamo
 
 import (
-	"fmt"
+	"strconv"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
 	"github.com/pkg/errors"
 )
 
@@ -66,7 +65,7 @@ func (db DB) CreateTable() error {
 func (db DB) DescribeTable() (string, error) {
 	result, err := db.client.DescribeTable(&dynamodb.DescribeTableInput{TableName: aws.String(db.tableName)})
 	if err != nil {
-		return "", errors.Wrap(err, "feiled to get table description")
+		return "", errors.Wrap(err, "failed to get table description")
 	}
 
 	return result.String(), nil
@@ -93,8 +92,8 @@ func (db DB) GetPolls(limitRows int64) (*dynamodb.ScanOutput, error) {
 	return result, nil
 }
 
-func (db DB) GetPoll(pollName string) (*dynamodb.QueryOutput, error) {
-	if pollName == "" {
+func (db DB) GetPoll(subject string) (*dynamodb.QueryOutput, error) {
+	if subject == "" {
 		return nil, ErrBadPollName
 	}
 
@@ -105,45 +104,115 @@ func (db DB) GetPoll(pollName string) (*dynamodb.QueryOutput, error) {
 			"subject": {
 				ComparisonOperator: aws.String("EQ"),
 				AttributeValueList: []*dynamodb.AttributeValue{
-					{
-						S: aws.String(pollName),
-					},
+					{S: aws.String(subject)},
 				},
 			},
 			"created_at": {
 				ComparisonOperator: aws.String("GT"),
 				AttributeValueList: []*dynamodb.AttributeValue{
-					{
-						N: aws.String("0"),
-					},
+					{N: aws.String("0")},
 				},
 			},
 		},
-		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":s": {
-				S: aws.String(pollName),
-			},
-		},
-		FilterExpression: aws.String("subject = :s"),
 	})
 	if err != nil {
-		return nil, errors.Wrapf(err, "get poll with subject '%s' error", pollName)
+		return nil, errors.Wrapf(err, "get poll with subject '%s' error", subject)
 	}
 
 	return result, nil
 }
 
-func (db DB) CreatePoll(poll interface{}) error {
-	fmt.Printf("!!!: %+v", poll)
-	item, err := dynamodbattribute.MarshalMap(poll)
-	if err != nil {
-		return errors.Wrap(err, "create poll error")
+func (db DB) GetPollByOwner(subject, owner string) (*dynamodb.QueryOutput, error) {
+	if subject == "" {
+		return nil, ErrBadPollName
 	}
 
-	_, err = db.client.PutItem(&dynamodb.PutItemInput{
+	result, err := db.client.Query(&dynamodb.QueryInput{
+		TableName: aws.String(db.tableName),
+		Limit:     aws.Int64(1),
+		KeyConditions: map[string]*dynamodb.Condition{
+			"subject": {
+				ComparisonOperator: aws.String("EQ"),
+				AttributeValueList: []*dynamodb.AttributeValue{
+					{S: aws.String(subject)},
+				},
+			},
+			"created_at": {
+				ComparisonOperator: aws.String("GT"),
+				AttributeValueList: []*dynamodb.AttributeValue{
+					{N: aws.String("0")},
+				},
+			},
+		},
+		FilterExpression: aws.String("created_by = :o"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":o": {S: aws.String(owner)},
+		},
+	})
+	if err != nil {
+		return nil, errors.Wrapf(err, "get poll with subject '%s' error", subject)
+	}
+
+	return result, nil
+}
+func (db DB) CreatePoll(item map[string]*dynamodb.AttributeValue) error {
+	_, err := db.client.PutItem(&dynamodb.PutItemInput{
 		TableName: aws.String(db.tableName),
 		Item:      item,
 	})
+	if err != nil {
+		return errors.Wrap(err, "failed to create items")
+	}
 
-	return err
+	return nil
+}
+
+func (db DB) DeletePoll(subject string, createdAt int64) error {
+	_, err := db.client.DeleteItem(&dynamodb.DeleteItemInput{
+		TableName: aws.String(db.tableName),
+		Key: map[string]*dynamodb.AttributeValue{
+			"subject":    {S: aws.String(subject)},
+			"created_at": {N: aws.String(strconv.FormatInt(createdAt, 10))},
+		},
+	})
+	if err != nil {
+		return errors.Wrapf(err, "failed to delete subject: %s", subject)
+	}
+
+	return nil
+}
+
+func (db DB) UpdateIsPublish(subject string, createdAt int64, isPublished bool) error {
+	_, err := db.client.UpdateItem(&dynamodb.UpdateItemInput{
+		TableName: aws.String(db.tableName),
+		Key: map[string]*dynamodb.AttributeValue{
+			"subject":    {S: aws.String(subject)},
+			"created_at": {N: aws.String(strconv.FormatInt(createdAt, 10))},
+		},
+		UpdateExpression: aws.String("set is_published = :p"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":p": {BOOL: aws.Bool(isPublished)},
+		},
+	})
+
+	return errors.Wrapf(err, "failed to update subject: %s", subject)
+}
+
+func (db DB) UpdateItems(subject string, createdAt int64, items []string) error {
+	_, err := db.client.UpdateItem(&dynamodb.UpdateItemInput{
+		TableName: aws.String(db.tableName),
+		Key: map[string]*dynamodb.AttributeValue{
+			"subject":    {S: aws.String(subject)},
+			"created_at": {N: aws.String(strconv.FormatInt(createdAt, 10))},
+		},
+		UpdateExpression: aws.String("set #itemList = :i"),
+		ExpressionAttributeNames: map[string]*string{
+			"#itemList": aws.String("items"),
+		},
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":i": {SS: aws.StringSlice(items)},
+		},
+	})
+
+	return errors.Wrapf(err, "failed to update subject: %s", subject)
 }
