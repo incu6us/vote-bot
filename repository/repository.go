@@ -90,6 +90,9 @@ func (r *Repository) CreatePoll(pollName, owner string, items []string) error {
 }
 
 func (r Repository) DeletePoll(pollName, owner string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	result, err := r.db.GetPollByOwner(pollName, owner)
 	if err != nil {
 		return err
@@ -108,6 +111,9 @@ func (r Repository) DeletePoll(pollName, owner string) error {
 }
 
 func (r Repository) UpdatePollIsPublished(pollName, owner string, isPublished bool) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	result, err := r.db.GetPollByOwner(pollName, owner)
 	if err != nil {
 		return err
@@ -126,6 +132,9 @@ func (r Repository) UpdatePollIsPublished(pollName, owner string, isPublished bo
 }
 
 func (r Repository) UpdatePollItems(pollName, owner string, items []string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	result, err := r.db.GetPollByOwner(pollName, owner)
 	if err != nil {
 		return err
