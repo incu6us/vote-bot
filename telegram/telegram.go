@@ -182,8 +182,7 @@ func (c Client) processInlineRequest(inline *tgbot.InlineQuery) error {
 		}
 
 		for _, poll := range polls {
-			resultArticleMarkdown := tgbot.NewInlineQueryResultArticleMarkdown(poll.Subject, poll.Subject, "sgvsetgwtfgew")
-			resultArticlesMarkdown = append(resultArticlesMarkdown, resultArticleMarkdown)
+			resultArticlesMarkdown = append(resultArticlesMarkdown, preparePollArticle(poll))
 		}
 	} else {
 		poll, err := c.store.GetPoll(inline.Query)
@@ -195,8 +194,7 @@ func (c Client) processInlineRequest(inline *tgbot.InlineQuery) error {
 			return errors.Wrap(err, "get poll error")
 		}
 
-		resultArticleMarkdown := tgbot.NewInlineQueryResultArticleMarkdown(poll.Subject, poll.Subject, "sgvsetgwtfgew")
-		resultArticlesMarkdown = append(resultArticlesMarkdown, resultArticleMarkdown)
+		resultArticlesMarkdown = append(resultArticlesMarkdown, preparePollArticle(poll))
 	}
 
 	inlineConfig := tgbot.InlineConfig{
@@ -212,4 +210,19 @@ func (c Client) processInlineRequest(inline *tgbot.InlineQuery) error {
 	}
 
 	return nil
+}
+
+func preparePollArticle(poll *domain.Poll) tgbot.InlineQueryResultArticle {
+	keyboard := new(tgbot.InlineKeyboardMarkup)
+	var row []tgbot.InlineKeyboardButton
+	for _, item := range poll.Items {
+		btn := tgbot.NewInlineKeyboardButtonData(item, item)
+		row = append(row, btn)
+	}
+	keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, row)
+
+	resultArticleMarkdown := tgbot.NewInlineQueryResultArticleMarkdown(poll.Subject, poll.Subject, fmt.Sprintf("*%s*", poll.Subject))
+	resultArticleMarkdown.ReplyMarkup = keyboard
+
+	return resultArticleMarkdown
 }
