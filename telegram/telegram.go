@@ -5,6 +5,7 @@ import (
 	"log"
 	"strings"
 	"vote-bot/domain"
+	"vote-bot/repository"
 
 	"github.com/pkg/errors"
 
@@ -34,7 +35,7 @@ type Client struct {
 }
 
 func Run(token, botName string, chatIDs []int64, store store) error {
-	client := &Client{secureChatIDs: chatIDs, store: store}
+	client := &Client{botName: botName, secureChatIDs: chatIDs, store: store}
 	if err := client.init(token); err != nil {
 		return err
 	}
@@ -63,7 +64,9 @@ func (c Client) init(token string) error {
 
 	for update := range updateCh {
 		if update.InlineQuery != nil {
-			log.Printf("!!! %+v", update.InlineQuery)
+			if err := c.processInlineRequest(update.InlineQuery); err != nil {
+				log.Printf("proccess inline query failed: %s", err)
+			}
 		}
 
 		if update.Message == nil {
@@ -156,4 +159,52 @@ func (c Client) chatHasAccess(chatID int64) bool {
 	}
 
 	return false
+}
+
+func (c Client) processInlineRequest(inline *tgbot.InlineQuery) error {
+	log.Printf("inline: %+v", inline)
+
+	resultArticlesMarkdown := make([]interface{}, 0, 10)
+
+	if len(inline.Query) <= 3 {
+		polls, err := c.store.GetPolls()
+		if err != nil {
+			if err == repository.ErrPollIsNotFound {
+				return nil
+			}
+
+			return errors.Wrap(err, "get poll error")
+		}
+
+		for _, poll := range polls {
+			resultArticleMarkdown := tgbot.NewInlineQueryResultArticleMarkdown(poll.Subject, poll.Subject, "sgvsetgwtfgew")
+			resultArticlesMarkdown = append(resultArticlesMarkdown, resultArticleMarkdown)
+		}
+	} else {
+		poll, err := c.store.GetPoll(inline.Query)
+		if err != nil {
+			if err == repository.ErrPollIsNotFound {
+				return nil
+			}
+
+			return errors.Wrap(err, "get poll error")
+		}
+
+		resultArticleMarkdown := tgbot.NewInlineQueryResultArticleMarkdown(poll.Subject, poll.Subject, "sgvsetgwtfgew")
+		resultArticlesMarkdown = append(resultArticlesMarkdown, resultArticleMarkdown)
+	}
+
+	inlineConfig := tgbot.InlineConfig{
+		InlineQueryID: inline.ID,
+		IsPersonal:    true,
+		CacheTime:     0,
+		Results:       resultArticlesMarkdown,
+	}
+
+	_, err := c.bot.AnswerInlineQuery(inlineConfig)
+	if err != nil {
+		return errors.Wrap(err, "answer inline error")
+	}
+
+	return nil
 }
