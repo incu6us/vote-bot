@@ -19,6 +19,7 @@ type store interface {
 	DeletePoll(pollName, owner string) error
 	UpdatePollIsPublished(pollName, owner string, isPublished bool) error
 	UpdatePollItems(pollName, owner string, items []string) error
+	UpdateVote(pollName, item, user string) error
 }
 
 const debug = true
@@ -63,6 +64,11 @@ func (c Client) init(token string) error {
 	}
 
 	for update := range updateCh {
+		if update.Message == nil && update.CallbackQuery != nil {
+			log.Printf("!!! %+v", update.CallbackQuery.Data)
+
+		}
+
 		if update.Message == nil && update.InlineQuery != nil {
 			if !c.userHasAccess(update.InlineQuery.From.ID) {
 				c.bot.Send(tgbot.NewMessage(int64(update.InlineQuery.From.ID), fmt.Sprintf("You have no access to the bot with chatID: %d", update.InlineQuery.From.ID)))
@@ -210,19 +216,4 @@ func (c Client) processInlineRequest(inline *tgbot.InlineQuery) error {
 	}
 
 	return nil
-}
-
-func preparePollArticle(poll *domain.Poll) tgbot.InlineQueryResultArticle {
-	keyboard := new(tgbot.InlineKeyboardMarkup)
-	var row []tgbot.InlineKeyboardButton
-	for _, item := range poll.Items {
-		btn := tgbot.NewInlineKeyboardButtonData(item, item)
-		row = append(row, btn)
-	}
-	keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, row)
-
-	resultArticleMarkdown := tgbot.NewInlineQueryResultArticleMarkdown(poll.Subject, poll.Subject, fmt.Sprintf("*%s*", poll.Subject))
-	resultArticleMarkdown.ReplyMarkup = keyboard
-
-	return resultArticleMarkdown
 }

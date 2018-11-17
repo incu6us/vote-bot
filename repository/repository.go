@@ -153,6 +153,12 @@ func (r *Repository) UpdatePollItems(pollName, owner string, items []string) err
 	return r.db.UpdateItems(pollName, poll.CreatedAt, items)
 }
 
+// TODO: implement
+func (r *Repository) UpdateVote(pollName, item, user string) error {
+
+	return nil
+}
+
 func (r Repository) convertMapToPoll(items ...map[string]*dynamodb.AttributeValue) ([]*domain.Poll, error) {
 	polls := make([]*domain.Poll, len(items))
 
