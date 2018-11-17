@@ -24,18 +24,18 @@ type store interface {
 const debug = true
 
 var (
-	polls = make(map[int64]*poll, 100)
+	polls = make(map[int]*poll, 100)
 )
 
 type Client struct {
 	botName       string
-	secureChatIDs []int64
+	secureUserIDs []int
 	bot           *tgbot.BotAPI
 	store         store
 }
 
-func Run(token, botName string, chatIDs []int64, store store) error {
-	client := &Client{botName: botName, secureChatIDs: chatIDs, store: store}
+func Run(token, botName string, userIDs []int, store store) error {
+	client := &Client{botName: botName, secureUserIDs: userIDs, store: store}
 	if err := client.init(token); err != nil {
 		return err
 	}
@@ -63,7 +63,12 @@ func (c Client) init(token string) error {
 	}
 
 	for update := range updateCh {
-		if update.InlineQuery != nil {
+		if update.Message == nil && update.InlineQuery != nil {
+			if !c.userHasAccess(update.InlineQuery.From.ID) {
+				c.bot.Send(tgbot.NewMessage(int64(update.InlineQuery.From.ID), fmt.Sprintf("You have no access to the bot with chatID: %d", update.InlineQuery.From.ID)))
+				continue
+			}
+
 			if err := c.processInlineRequest(update.InlineQuery); err != nil {
 				log.Printf("proccess inline query failed: %s", err)
 			}
@@ -73,7 +78,7 @@ func (c Client) init(token string) error {
 			continue
 		}
 
-		if update.Message.Chat != nil && !c.chatHasAccess(update.Message.Chat.ID) {
+		if update.Message.Chat != nil && !c.userHasAccess(update.Message.From.ID) {
 			c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("You have no access to the bot with chatID: %d", update.Message.Chat.ID)))
 			continue
 		}
@@ -87,37 +92,37 @@ func (c Client) init(token string) error {
 				c.bot.Send(msg)
 				continue
 			case "cancel":
-				delete(polls, update.Message.Chat.ID)
+				delete(polls, update.Message.From.ID)
 				c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "canceled"))
 				continue
 			case "done":
-				poll, ok := polls[update.Message.Chat.ID]
+				poll, ok := polls[update.Message.From.ID]
 				if !ok {
 					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "no such poll"))
 					continue
 				}
 
 				if poll.pollName == "" || len(poll.items) == 0 {
-					delete(polls, update.Message.Chat.ID)
+					delete(polls, update.Message.From.ID)
 					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "poll name and items should be set. Try again to create a new poll"))
 					continue
 				}
 
 				if err := c.store.CreatePoll(poll.pollName, poll.owner, poll.items); err != nil {
-					delete(polls, update.Message.Chat.ID)
+					delete(polls, update.Message.From.ID)
 					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("poll creation error: %s", err)))
 					continue
 				}
 
-				delete(polls, update.Message.Chat.ID)
+				delete(polls, update.Message.From.ID)
 
 				msg := tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Poll created. Use `@%s %s`", c.botName, poll.pollName))
 				msg.ParseMode = "markdown"
 				c.bot.Send(msg)
 				continue
 			case "newpoll":
-				if _, ok := polls[update.Message.Chat.ID]; !ok {
-					polls[update.Message.Chat.ID] = &poll{owner: fmt.Sprintf("%d-%s %s", update.Message.From.ID, update.Message.From.FirstName, update.Message.From.LastName)}
+				if _, ok := polls[update.Message.From.ID]; !ok {
+					polls[update.Message.From.ID] = &poll{owner: fmt.Sprintf("%d-%s %s", update.Message.From.ID, update.Message.From.FirstName, update.Message.From.LastName)}
 				}
 				msg := tgbot.NewMessage(update.Message.Chat.ID, "enter a poll name")
 				c.bot.Send(msg)
@@ -133,14 +138,14 @@ func (c Client) init(token string) error {
 				continue
 			}
 
-			if _, ok := polls[update.Message.Chat.ID]; ok {
-				if polls[update.Message.Chat.ID].pollName == "" {
-					polls[update.Message.Chat.ID].pollName = update.Message.Text
+			if _, ok := polls[update.Message.From.ID]; ok {
+				if polls[update.Message.From.ID].pollName == "" {
+					polls[update.Message.From.ID].pollName = update.Message.Text
 					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "put items"))
 					continue
 				}
 
-				polls[update.Message.Chat.ID].items = append(polls[update.Message.Chat.ID].items, update.Message.Text)
+				polls[update.Message.From.ID].items = append(polls[update.Message.From.ID].items, update.Message.Text)
 				msg := tgbot.NewMessage(update.Message.Chat.ID, "- put items;\n- `/done` - to complete the poll creation;\n- `/cancel` - to cancel the poll creation")
 				msg.ParseMode = "markdown"
 				c.bot.Send(msg)
@@ -151,9 +156,9 @@ func (c Client) init(token string) error {
 	return nil
 }
 
-func (c Client) chatHasAccess(chatID int64) bool {
-	for _, secureChatID := range c.secureChatIDs {
-		if secureChatID == chatID {
+func (c Client) userHasAccess(userID int) bool {
+	for _, securedUserID := range c.secureUserIDs {
+		if securedUserID == userID {
 			return true
 		}
 	}
