@@ -27,12 +27,13 @@ var (
 )
 
 type Client struct {
+	botName       string
 	secureChatIDs []int64
 	bot           *tgbot.BotAPI
 	store         store
 }
 
-func Run(token string, chatIDs []int64, store store) error {
+func Run(token, botName string, chatIDs []int64, store store) error {
 	client := &Client{secureChatIDs: chatIDs, store: store}
 	if err := client.init(token); err != nil {
 		return err
@@ -61,6 +62,10 @@ func (c Client) init(token string) error {
 	}
 
 	for update := range updateCh {
+		if update.InlineQuery != nil {
+			log.Printf("!!! %+v", update.InlineQuery)
+		}
+
 		if update.Message == nil {
 			continue
 		}
@@ -70,72 +75,74 @@ func (c Client) init(token string) error {
 			continue
 		}
 
-		go func(update tgbot.Update) {
-			if update.Message.IsCommand() {
-				switch strings.ToLower(update.Message.Command()) {
-				case "help":
-					msg := tgbot.NewMessage(update.Message.Chat.ID, "")
-					msg.ParseMode = "markdown"
-					msg.Text = "use this command for help"
-					c.bot.Send(msg)
-					return
-				case "cancel":
+		if update.Message.IsCommand() {
+			switch strings.ToLower(update.Message.Command()) {
+			case "help":
+				msg := tgbot.NewMessage(update.Message.Chat.ID, "")
+				msg.ParseMode = "markdown"
+				msg.Text = "use this command for help"
+				c.bot.Send(msg)
+				continue
+			case "cancel":
+				delete(polls, update.Message.Chat.ID)
+				c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "canceled"))
+				continue
+			case "done":
+				poll, ok := polls[update.Message.Chat.ID]
+				if !ok {
+					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "no such poll"))
+					continue
+				}
+
+				if poll.pollName == "" || len(poll.items) == 0 {
 					delete(polls, update.Message.Chat.ID)
-					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "canceled"))
-					return
-				case "done":
-					poll, ok := polls[update.Message.Chat.ID]
-					if !ok {
-						c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "no such poll"))
-						return
-					}
-
-					defer delete(polls, update.Message.Chat.ID)
-
-					if poll.pollName == "" || len(poll.items) == 0 {
-						c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "poll name and items should be set"))
-						return
-					}
-
-					if err := c.store.CreatePoll(poll.pollName, poll.owner, poll.items); err != nil {
-						c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("poll creation error: %s", err)))
-						return
-					}
-
-					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "poll created"))
-					return
-				case "newpoll":
-					if _, ok := polls[update.Message.Chat.ID]; !ok {
-						polls[update.Message.Chat.ID] = &poll{owner: fmt.Sprintf("%d-%s %s", update.Message.From.ID, update.Message.From.FirstName, update.Message.From.LastName)}
-					}
-					msg := tgbot.NewMessage(update.Message.Chat.ID, "enter a poll name")
-					c.bot.Send(msg)
-					return
-				default:
-					msg := tgbot.NewMessage(update.Message.Chat.ID, "bad command")
-					c.bot.Send(msg)
-					return
-				}
-			} else {
-				if strings.TrimSpace(update.Message.Text) == "" {
-					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "message is empty"))
-					return
+					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "poll name and items should be set. Try again to create a new poll"))
+					continue
 				}
 
-				if _, ok := polls[update.Message.Chat.ID]; ok {
-					if polls[update.Message.Chat.ID].pollName == "" {
-						polls[update.Message.Chat.ID].pollName = update.Message.Text
-						c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "put items"))
-						return
-					}
-
-					polls[update.Message.Chat.ID].items = append(polls[update.Message.Chat.ID].items, update.Message.Text)
-					msg := tgbot.NewMessage(update.Message.Chat.ID, "- put items;\n- `/done` - to complete the poll creation;\n- `/cancel` - to cancel the poll creation")
-					msg.ParseMode = "markdown"
-					c.bot.Send(msg)
+				if err := c.store.CreatePoll(poll.pollName, poll.owner, poll.items); err != nil {
+					delete(polls, update.Message.Chat.ID)
+					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("poll creation error: %s", err)))
+					continue
 				}
+
+				delete(polls, update.Message.Chat.ID)
+
+				msg := tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Poll created. Use `@%s %s`", c.botName, poll.pollName))
+				msg.ParseMode = "markdown"
+				c.bot.Send(msg)
+				continue
+			case "newpoll":
+				if _, ok := polls[update.Message.Chat.ID]; !ok {
+					polls[update.Message.Chat.ID] = &poll{owner: fmt.Sprintf("%d-%s %s", update.Message.From.ID, update.Message.From.FirstName, update.Message.From.LastName)}
+				}
+				msg := tgbot.NewMessage(update.Message.Chat.ID, "enter a poll name")
+				c.bot.Send(msg)
+				continue
+			default:
+				msg := tgbot.NewMessage(update.Message.Chat.ID, "bad command")
+				c.bot.Send(msg)
+				continue
 			}
-		}(update)
+		} else {
+			if strings.TrimSpace(update.Message.Text) == "" {
+				c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "message is empty"))
+				continue
+			}
+
+			if _, ok := polls[update.Message.Chat.ID]; ok {
+				if polls[update.Message.Chat.ID].pollName == "" {
+					polls[update.Message.Chat.ID].pollName = update.Message.Text
+					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "put items"))
+					continue
+				}
+
+				polls[update.Message.Chat.ID].items = append(polls[update.Message.Chat.ID].items, update.Message.Text)
+				msg := tgbot.NewMessage(update.Message.Chat.ID, "- put items;\n- `/done` - to complete the poll creation;\n- `/cancel` - to cancel the poll creation")
+				msg.ParseMode = "markdown"
+				c.bot.Send(msg)
+			}
+		}
 	}
 
 	return nil

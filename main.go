@@ -47,9 +47,15 @@ func main() {
 		return
 	}
 
-	chatIDSlice := cfg.Get("telegram.chat_id").([]interface{})
+	botName := cfg.GetString("telegram.bot_name")
+	if botName == "" {
+		log.Printf("telegram bot name is not set")
+		return
+	}
+
+	chatIDSlice := cfg.Get("telegram.chat_ids").([]interface{})
 	if len(chatIDSlice) == 0 {
-		log.Printf("telegram chatID is not set")
+		log.Printf("telegram chatIDs is not set")
 		return
 	}
 
@@ -198,5 +204,5 @@ func main() {
 	// }
 	// log.Println("poll updated")
 
-	log.Printf("telegram start failed: %s\n", telegram.Run(telegramToken, chatIDs, repo))
+	log.Printf("telegram start failed: %s\n", telegram.Run(telegramToken, botName, chatIDs, repo))
 }
