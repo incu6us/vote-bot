@@ -216,3 +216,19 @@ func (db DB) UpdateItems(subject string, createdAt int64, items []string) error 
 
 	return errors.Wrapf(err, "failed to update subject: %s", subject)
 }
+
+func (db DB) UpdateVotes(subject string, createdAt int64, votes map[string]*dynamodb.AttributeValue) error {
+	_, err := db.client.UpdateItem(&dynamodb.UpdateItemInput{
+		TableName: aws.String(db.tableName),
+		Key: map[string]*dynamodb.AttributeValue{
+			"subject":    {S: aws.String(subject)},
+			"created_at": {N: aws.String(strconv.FormatInt(createdAt, 10))},
+		},
+		UpdateExpression: aws.String("set votes = :v"),
+		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
+			":v": {M: votes},
+		},
+	})
+
+	return errors.Wrapf(err, "failed to update votest: %s", subject)
+}

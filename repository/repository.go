@@ -78,7 +78,7 @@ func (r *Repository) CreatePoll(pollName, owner string, items []string) error {
 		CreatedAt: time.Now().UnixNano(),
 		Subject:   pollName,
 		Items:     items,
-		ItemVotes: map[string][]string{},
+		Votes:     map[string][]string{},
 		CreatedBy: owner,
 	}
 
@@ -153,10 +153,34 @@ func (r *Repository) UpdatePollItems(pollName, owner string, items []string) err
 	return r.db.UpdateItems(pollName, poll.CreatedAt, items)
 }
 
-// TODO: implement
-func (r *Repository) UpdateVote(pollName, item, user string) error {
+func (r *Repository) CreateVote(pollName, item, voter string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	return nil
+	poll, err := r.getPoll(pollName)
+	if err != nil {
+		return errors.Wrap(err, "get poll failed")
+	}
+
+	// delete previous vote fo the user
+	for item, users := range poll.Votes {
+		for i, user := range users {
+			if user == voter {
+				users = append(users[:i], users[i+1:]...)
+				poll.Votes[item] = users
+			}
+		}
+	}
+
+	// add user to vote item
+	votes := append(poll.Votes[item], voter)
+
+	voteAttributes, err := dynamodbattribute.MarshalMap(votes)
+	if err != nil {
+		return errors.Wrap(err, "failed to marshal votes")
+	}
+
+	return r.db.UpdateVotes(pollName, poll.CreatedAt, voteAttributes)
 }
 
 func (r Repository) convertMapToPoll(items ...map[string]*dynamodb.AttributeValue) ([]*domain.Poll, error) {

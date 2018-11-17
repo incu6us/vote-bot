@@ -6,5 +6,5 @@ type Poll struct {
 	Items       []string            `json:"items"`
 	CreatedBy   string              `json:"created_by"`
 	IsPublished bool                `json:"is_published"`
-	ItemVotes   map[string][]string `json:"item_votes"`
+	Votes       map[string][]string `json:"votes"`
 }
