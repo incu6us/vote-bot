@@ -3,7 +3,7 @@ package repository
 import (
 	"sync"
 	"time"
-
+	"vote-bot/domain"
 	"vote-bot/repository/internal/dynamo"
 
 	"github.com/aws/aws-sdk-go/service/dynamodb"
@@ -42,7 +42,7 @@ func (r *Repository) DescribeTable() (string, error) {
 	return r.db.DescribeTable()
 }
 
-func (r *Repository) GetPolls() ([]*Poll, error) {
+func (r *Repository) GetPolls() ([]*domain.Poll, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -54,7 +54,7 @@ func (r *Repository) GetPolls() ([]*Poll, error) {
 	return r.convertMapToPoll(result.Items...)
 }
 
-func (r *Repository) GetPoll(pollName string) (*Poll, error) {
+func (r *Repository) GetPoll(pollName string) (*domain.Poll, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -74,10 +74,11 @@ func (r *Repository) CreatePoll(pollName, owner string, items []string) error {
 		return ErrPollAlreadyExist
 	}
 
-	poll := &Poll{
+	poll := &domain.Poll{
 		CreatedAt: time.Now().UnixNano(),
 		Subject:   pollName,
 		Items:     items,
+		ItemVotes: map[string][]string{},
 		CreatedBy: owner,
 	}
 
@@ -89,7 +90,7 @@ func (r *Repository) CreatePoll(pollName, owner string, items []string) error {
 	return r.db.CreatePoll(item)
 }
 
-func (r Repository) DeletePoll(pollName, owner string) error {
+func (r *Repository) DeletePoll(pollName, owner string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -102,7 +103,7 @@ func (r Repository) DeletePoll(pollName, owner string) error {
 		return ErrPollIsNotFound
 	}
 
-	var poll Poll
+	var poll domain.Poll
 	if err := dynamodbattribute.UnmarshalMap(result.Items[0], &poll); err != nil {
 		return err
 	}
@@ -110,7 +111,7 @@ func (r Repository) DeletePoll(pollName, owner string) error {
 	return r.db.DeletePoll(pollName, poll.CreatedAt)
 }
 
-func (r Repository) UpdatePollIsPublished(pollName, owner string, isPublished bool) error {
+func (r *Repository) UpdatePollIsPublished(pollName, owner string, isPublished bool) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -123,7 +124,7 @@ func (r Repository) UpdatePollIsPublished(pollName, owner string, isPublished bo
 		return ErrPollIsNotFound
 	}
 
-	var poll Poll
+	var poll domain.Poll
 	if err := dynamodbattribute.UnmarshalMap(result.Items[0], &poll); err != nil {
 		return err
 	}
@@ -131,7 +132,7 @@ func (r Repository) UpdatePollIsPublished(pollName, owner string, isPublished bo
 	return r.db.UpdateIsPublish(pollName, poll.CreatedAt, isPublished)
 }
 
-func (r Repository) UpdatePollItems(pollName, owner string, items []string) error {
+func (r *Repository) UpdatePollItems(pollName, owner string, items []string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -144,7 +145,7 @@ func (r Repository) UpdatePollItems(pollName, owner string, items []string) erro
 		return ErrPollIsNotFound
 	}
 
-	var poll Poll
+	var poll domain.Poll
 	if err := dynamodbattribute.UnmarshalMap(result.Items[0], &poll); err != nil {
 		return err
 	}
@@ -152,11 +153,11 @@ func (r Repository) UpdatePollItems(pollName, owner string, items []string) erro
 	return r.db.UpdateItems(pollName, poll.CreatedAt, items)
 }
 
-func (r Repository) convertMapToPoll(items ...map[string]*dynamodb.AttributeValue) ([]*Poll, error) {
-	polls := make([]*Poll, len(items))
+func (r Repository) convertMapToPoll(items ...map[string]*dynamodb.AttributeValue) ([]*domain.Poll, error) {
+	polls := make([]*domain.Poll, len(items))
 
 	for i, item := range items {
-		poll := new(Poll)
+		poll := new(domain.Poll)
 		if err := dynamodbattribute.UnmarshalMap(item, poll); err != nil {
 			return nil, errors.Wrap(err, "failed to unmarshal map for item")
 		}
@@ -167,7 +168,7 @@ func (r Repository) convertMapToPoll(items ...map[string]*dynamodb.AttributeValu
 	return polls, nil
 }
 
-func (r Repository) getPoll(pollName string) (*Poll, error) {
+func (r Repository) getPoll(pollName string) (*domain.Poll, error) {
 	item, err := r.db.GetPoll(pollName)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get a poll by name")
@@ -177,7 +178,7 @@ func (r Repository) getPoll(pollName string) (*Poll, error) {
 		return nil, ErrPollIsNotFound
 	}
 
-	poll := new(Poll)
+	poll := new(domain.Poll)
 	if err := dynamodbattribute.UnmarshalMap(item.Items[0], poll); err != nil {
 		return nil, errors.Wrap(err, "failed to unmarshal item")
 	}

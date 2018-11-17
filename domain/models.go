@@ -1,4 +1,4 @@
-package repository
+package domain
 
 type Poll struct {
 	Subject     string              `json:"subject"`

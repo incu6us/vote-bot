@@ -2,14 +2,14 @@ package main
 
 import (
 	"log"
+	"vote-bot/telegram"
+
 	cfg "vote-bot/config"
 	"vote-bot/repository"
 
-	"github.com/pkg/errors"
-
-	"github.com/aws/aws-sdk-go/service/dynamodb"
-
 	"github.com/aws/aws-sdk-go/aws/awserr"
+	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -17,27 +17,12 @@ const (
 	cfgFile   = "config.json"
 )
 
-const (
-	indexName = "subject"
-	pageLimit = 5
-)
-
-type Answer struct {
-	Item  string   `json:"item"`
-	Users []string `json:"users"`
-}
-
-type Vote struct {
-	Subject string    `json:"subject"`
-	Items   []string  `json:"items"`
-	Answers []*Answer `json:"answers"`
-}
-
 func config() (*cfg.Config, error) {
 	return cfg.New(cfgPrefix, cfgFile, cfg.JSONConfigType)
 }
 
 func main() {
+
 	cfg, err := config()
 	if err != nil {
 		log.Printf("failed to read config file: %s", err)
@@ -54,6 +39,23 @@ func main() {
 	if tableName == "" {
 		log.Printf("dynamo table is not set")
 		return
+	}
+
+	telegramToken := cfg.GetString("telegram.token")
+	if telegramToken == "" {
+		log.Printf("telegram token is not set")
+		return
+	}
+
+	chatIDSlice := cfg.Get("telegram.chat_id").([]interface{})
+	if len(chatIDSlice) == 0 {
+		log.Printf("telegram chatID is not set")
+		return
+	}
+
+	chatIDs := make([]int64, len(chatIDSlice))
+	for i, chatID := range chatIDSlice {
+		chatIDs[i] = int64(chatID.(float64))
 	}
 
 	// awsCfg := aws.NewConfig().WithRegion(region).WithCredentials(credentials.NewEnvCredentials())
@@ -189,10 +191,12 @@ func main() {
 	// }
 	// log.Println("poll updated")
 
-	err = repo.UpdatePollItems("test1", "me", []string{"qw", "rt"})
-	if err != nil {
-		log.Printf("poll update failed: %s", err)
-		return
-	}
-	log.Println("poll updated")
+	// err = repo.UpdatePollItems("test1", "me", []string{"qw", "rt"})
+	// if err != nil {
+	// 	log.Printf("poll update failed: %s", err)
+	// 	return
+	// }
+	// log.Println("poll updated")
+
+	log.Printf("telegram start failed: %s\n", telegram.Run(telegramToken, chatIDs, repo))
 }
