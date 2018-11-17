@@ -153,7 +153,7 @@ func (r *Repository) UpdatePollItems(pollName, owner string, items []string) err
 	return r.db.UpdateItems(pollName, poll.CreatedAt, items)
 }
 
-func (r *Repository) CreateVote(pollName, item, voter string) error {
+func (r *Repository) Vote(pollName, item, voter string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 

@@ -19,7 +19,7 @@ type store interface {
 	DeletePoll(pollName, owner string) error
 	UpdatePollIsPublished(pollName, owner string, isPublished bool) error
 	UpdatePollItems(pollName, owner string, items []string) error
-	CreateVote(pollName, item, user string) error
+	Vote(pollName, item, user string) error
 }
 
 const debug = true
@@ -66,7 +66,7 @@ func (c Client) init(token string) error {
 	for update := range updateCh {
 		if update.Message == nil && update.CallbackQuery != nil {
 			log.Printf("!!! %+v", update.CallbackQuery)
-			// c.store.CreateVote()
+			// c.store.Vote()
 		}
 
 		if update.Message == nil && update.InlineQuery != nil {
