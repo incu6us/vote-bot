@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"encoding/json"
+	"fmt"
 	"vote-bot/domain"
 
 	"github.com/pkg/errors"
@@ -37,4 +38,8 @@ func serializeCallbackData(data string) (*callbackData, error) {
 	}
 
 	return callbackData, nil
+}
+
+func msgYouHaveNoAccess(id int64) string {
+	return fmt.Sprintf("You have no access to the bot with userID: %d", id)
 }
