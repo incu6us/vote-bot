@@ -4,14 +4,10 @@ import (
 	"encoding/json"
 	"vote-bot/domain"
 
+	"github.com/pkg/errors"
+
 	tgbot "github.com/go-telegram-bot-api/telegram-bot-api"
 )
-
-// TODO: move to models.go
-type callbackData struct {
-	PollName string `json:"poll_name"`
-	Vote     string `json:"vote"`
-}
 
 func preparePollArticle(poll *domain.Poll) tgbot.InlineQueryResultArticle {
 	keyboard := new(tgbot.InlineKeyboardMarkup)
@@ -32,4 +28,13 @@ func preparePollArticle(poll *domain.Poll) tgbot.InlineQueryResultArticle {
 func prepareCallbackData(pollName, vote string) string {
 	data, _ := json.Marshal(callbackData{PollName: pollName, Vote: vote})
 	return string(data)
+}
+
+func serializeCallbackData(data string) (*callbackData, error) {
+	callbackData := new(callbackData)
+	if err := json.Unmarshal([]byte(data), callbackData); err != nil {
+		return nil, errors.Wrap(err, "serialize callback data error")
+	}
+
+	return callbackData, nil
 }

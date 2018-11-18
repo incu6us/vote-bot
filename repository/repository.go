@@ -153,7 +153,7 @@ func (r *Repository) UpdatePollItems(pollName, owner string, items []string) err
 	return r.db.UpdateItems(pollName, poll.CreatedAt, items)
 }
 
-func (r *Repository) Vote(pollName, item, voter string) error {
+func (r *Repository) UpdateVote(pollName, item, voter string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -173,9 +173,17 @@ func (r *Repository) Vote(pollName, item, voter string) error {
 	}
 
 	// add user to vote item
-	votes := append(poll.Votes[item], voter)
+	if poll.Votes == nil {
+		poll.Votes = make(map[string][]string)
+	}
 
-	voteAttributes, err := dynamodbattribute.MarshalMap(votes)
+	if _, ok := poll.Votes[item]; !ok {
+		poll.Votes[item] = []string{voter}
+	} else {
+		poll.Votes[item] = append(poll.Votes[item], voter)
+	}
+
+	voteAttributes, err := dynamodbattribute.MarshalMap(poll.Votes)
 	if err != nil {
 		return errors.Wrap(err, "failed to marshal votes")
 	}

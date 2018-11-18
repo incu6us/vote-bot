@@ -19,7 +19,7 @@ type store interface {
 	DeletePoll(pollName, owner string) error
 	UpdatePollIsPublished(pollName, owner string, isPublished bool) error
 	UpdatePollItems(pollName, owner string, items []string) error
-	Vote(pollName, item, user string) error
+	UpdateVote(pollName, item, user string) error
 }
 
 const debug = true
@@ -66,7 +66,16 @@ func (c Client) init(token string) error {
 	for update := range updateCh {
 		if update.Message == nil && update.CallbackQuery != nil {
 			log.Printf("!!! %+v", update.CallbackQuery)
-			// c.store.Vote()
+			cbackData, err := serializeCallbackData(update.CallbackQuery.Data)
+			if err != nil {
+				log.Printf("get callback data error: %s", err)
+				continue
+			}
+
+			if err := c.store.UpdateVote(cbackData.PollName, cbackData.Vote, update.CallbackQuery.From.String()); err != nil {
+				log.Printf("update vote failed: %s", err)
+				continue
+			}
 		}
 
 		if update.Message == nil && update.InlineQuery != nil {
@@ -128,7 +137,7 @@ func (c Client) init(token string) error {
 				continue
 			case "newpoll":
 				if _, ok := polls[update.Message.From.ID]; !ok {
-					polls[update.Message.From.ID] = &poll{owner: fmt.Sprintf("%d-%s %s", update.Message.From.ID, update.Message.From.FirstName, update.Message.From.LastName)}
+					polls[update.Message.From.ID] = &poll{owner: fmt.Sprintf("(%d) %s", update.Message.From.ID, update.Message.From.String())}
 				}
 				msg := tgbot.NewMessage(update.Message.Chat.ID, "enter a poll name")
 				c.bot.Send(msg)
