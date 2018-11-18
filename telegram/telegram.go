@@ -19,7 +19,7 @@ type store interface {
 	DeletePoll(pollName, owner string) error
 	UpdatePollIsPublished(pollName, owner string, isPublished bool) error
 	UpdatePollItems(pollName, owner string, items []string) error
-	UpdateVote(pollName, item, user string) error
+	UpdateVote(pollName, item, user string) (*domain.Poll, error)
 }
 
 const debug = true
@@ -65,17 +65,7 @@ func (c Client) init(token string) error {
 
 	for update := range updateCh {
 		if update.Message == nil && update.CallbackQuery != nil {
-			log.Printf("!!! %+v", update.CallbackQuery)
-			cbackData, err := serializeCallbackData(update.CallbackQuery.Data)
-			if err != nil {
-				log.Printf("get callback data error: %s", err)
-				continue
-			}
-
-			if err := c.store.UpdateVote(cbackData.PollName, cbackData.Vote, update.CallbackQuery.From.String()); err != nil {
-				log.Printf("update vote failed: %s", err)
-				continue
-			}
+			c.processCallbackRequest(update.CallbackQuery)
 		}
 
 		if update.Message == nil && update.InlineQuery != nil {
@@ -222,6 +212,33 @@ func (c Client) processInlineRequest(inline *tgbot.InlineQuery) error {
 	_, err := c.bot.AnswerInlineQuery(inlineConfig)
 	if err != nil {
 		return errors.Wrap(err, "answer inline error")
+	}
+
+	return nil
+}
+
+func (c Client) processCallbackRequest(callback *tgbot.CallbackQuery) error {
+	log.Printf("!!! %+v", callback)
+	callbackData, err := serializeCallbackData(callback.Data)
+	if err != nil {
+		return errors.Wrap(err, "get callback data error")
+	}
+
+	_, err = c.store.UpdateVote(callbackData.PollName, callbackData.Vote, callback.From.String())
+	if err != nil {
+		return errors.Wrap(err, "update vote failed")
+	}
+
+	callbackConfig := tgbot.CallbackConfig{
+		CallbackQueryID: callback.ID,
+		Text:            fmt.Sprintf("Vote %s accepted", callbackData.Vote),
+		ShowAlert:       false,
+		URL:             "",
+		CacheTime:       0,
+	}
+
+	if _, err := c.bot.AnswerCallbackQuery(callbackConfig); err != nil {
+		return errors.Wrap(err, "answer callback error")
 	}
 
 	return nil

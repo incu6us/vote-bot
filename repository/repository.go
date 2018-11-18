@@ -153,13 +153,13 @@ func (r *Repository) UpdatePollItems(pollName, owner string, items []string) err
 	return r.db.UpdateItems(pollName, poll.CreatedAt, items)
 }
 
-func (r *Repository) UpdateVote(pollName, item, voter string) error {
+func (r *Repository) UpdateVote(pollName, item, voter string) (*domain.Poll, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	poll, err := r.getPoll(pollName)
 	if err != nil {
-		return errors.Wrap(err, "get poll failed")
+		return nil, errors.Wrap(err, "get poll failed")
 	}
 
 	// delete previous vote fo the user
@@ -189,10 +189,14 @@ func (r *Repository) UpdateVote(pollName, item, voter string) error {
 
 	voteAttributes, err := dynamodbattribute.MarshalMap(poll.Votes)
 	if err != nil {
-		return errors.Wrap(err, "failed to marshal votes")
+		return nil, errors.Wrap(err, "failed to marshal votes")
 	}
 
-	return r.db.UpdateVotes(pollName, poll.CreatedAt, voteAttributes)
+	if err := r.db.UpdateVotes(pollName, poll.CreatedAt, voteAttributes); err != nil {
+		return nil, errors.Wrap(err, "failed to update vote in database")
+	}
+
+	return poll, nil
 }
 
 func (r Repository) convertMapToPoll(items ...map[string]*dynamodb.AttributeValue) ([]*domain.Poll, error) {
