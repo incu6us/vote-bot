@@ -11,6 +11,6 @@ type Poll struct {
 }
 
 func (p Poll) String() string {
-	return fmt.Sprintf("{ Subject: '%s', CreatedAt: %d, Items: [%q], CreatedBy: '%s', Votes: %+v",
+	return fmt.Sprintf("{ Subject: '%s', CreatedAt: %d, Items: %q, CreatedBy: '%s', Votes: %+v",
 		p.Subject, p.CreatedAt, p.Items, p.CreatedBy, p.Votes)
 }

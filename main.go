@@ -59,13 +59,17 @@ func main() {
 		return
 	}
 
-	userIDs := make([]int, len(userIDSlice))
-	var count int
-	for _, chatID := range userIDSlice {
-		for _, id := range chatID.(map[string]interface{}) {
-			userIDs[count] = int(id.(float64))
+	userIDs := make([]int, 0)
+	for _, userID := range userIDSlice {
+		for _, id := range userID.(map[string]interface{}) {
+			userIDs = append(userIDs, int(id.(float64)))
 		}
-		count++
+	}
+
+	chatID := cfg.GetInt64("telegram.chat_id")
+	if chatID == 0 {
+		log.Printf("telegram chatID is not set")
+		return
 	}
 
 	// awsCfg := aws.NewConfig().WithRegion(region).WithCredentials(credentials.NewEnvCredentials())
@@ -208,5 +212,5 @@ func main() {
 	// }
 	// log.Println("poll updated")
 
-	log.Printf("telegram start failed: %s\n", telegram.Run(telegramToken, botName, userIDs, repo))
+	log.Printf("telegram start failed: %s\n", telegram.Run(telegramToken, botName, chatID, userIDs, repo))
 }
