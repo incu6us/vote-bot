@@ -167,7 +167,11 @@ func (r *Repository) UpdateVote(pollName, item, voter string) error {
 		for i, user := range users {
 			if user == voter {
 				users = append(users[:i], users[i+1:]...)
-				poll.Votes[item] = users
+				if len(users) > 0 {
+					poll.Votes[item] = users
+				} else {
+					delete(poll.Votes, item)
+				}
 			}
 		}
 	}
