@@ -1,6 +1,7 @@
 package dynamo
 
 import (
+	"log"
 	"strconv"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -115,6 +116,31 @@ func (db DB) GetPoll(subject string) (*dynamodb.QueryOutput, error) {
 			},
 		},
 	})
+	if err != nil {
+		return nil, errors.Wrapf(err, "get poll with subject '%s' error", subject)
+	}
+
+	return result, nil
+}
+
+func (db DB) GetPollLike(subject string, limit int64) (*dynamodb.ScanOutput, error) {
+	if subject == "" {
+		return nil, ErrBadPollName
+	}
+
+	result, err := db.client.Scan(&dynamodb.ScanInput{
+		TableName: aws.String(db.tableName),
+		Limit:     aws.Int64(limit),
+		ScanFilter: map[string]*dynamodb.Condition{
+			"subject": {
+				ComparisonOperator: aws.String("BEGINS_WITH"),
+				AttributeValueList: []*dynamodb.AttributeValue{
+					{S: aws.String(subject)},
+				},
+			},
+		},
+	})
+	log.Printf("POLL %+v", result)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get poll with subject '%s' error", subject)
 	}

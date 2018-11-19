@@ -15,6 +15,7 @@ import (
 type store interface {
 	GetPolls() ([]*domain.Poll, error)
 	GetPoll(pollName string) (*domain.Poll, error)
+	GetPollLike(pollName string) (*domain.Poll, error)
 	CreatePoll(pollName, owner string, items []string) error
 	DeletePoll(pollName, owner string) error
 	UpdatePollIsPublished(pollName, owner string, isPublished bool) error
@@ -214,32 +215,21 @@ func (c Client) userHasAccess(userID int) bool {
 func (c Client) processInlineRequest(inline *tgbot.InlineQuery) error {
 	log.Printf("inline: %+v", inline)
 
-	resultArticlesMarkdown := make([]interface{}, 0, 10)
-
 	if len(inline.Query) <= 3 {
-		polls, err := c.store.GetPolls()
-		if err != nil {
-			if err == repository.ErrPollIsNotFound {
-				return nil
-			}
+		return nil
+	}
 
-			return errors.Wrap(err, "get poll error")
+	poll, err := c.store.GetPollLike(inline.Query)
+	if err != nil {
+		if err == repository.ErrPollIsNotFound {
+			return nil
 		}
 
-		for _, poll := range polls {
-			resultArticlesMarkdown = append(resultArticlesMarkdown, preparePollArticle(poll))
-		}
-	} else {
-		poll, err := c.store.GetPoll(inline.Query)
-		if err != nil {
-			if err == repository.ErrPollIsNotFound {
-				return nil
-			}
+		return errors.Wrap(err, "get poll error")
+	}
 
-			return errors.Wrap(err, "get poll error")
-		}
-
-		resultArticlesMarkdown = append(resultArticlesMarkdown, preparePollArticle(poll))
+	resultArticlesMarkdown := []interface{}{
+		preparePollArticle(poll),
 	}
 
 	inlineConfig := tgbot.InlineConfig{
@@ -249,7 +239,7 @@ func (c Client) processInlineRequest(inline *tgbot.InlineQuery) error {
 		Results:       resultArticlesMarkdown,
 	}
 
-	_, err := c.bot.AnswerInlineQuery(inlineConfig)
+	_, err = c.bot.AnswerInlineQuery(inlineConfig)
 	if err != nil {
 		return errors.Wrap(err, "answer inline error")
 	}

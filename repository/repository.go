@@ -61,6 +61,27 @@ func (r *Repository) GetPoll(pollName string) (*domain.Poll, error) {
 	return r.getPoll(pollName)
 }
 
+func (r *Repository) GetPollLike(pollName string) (*domain.Poll, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	item, err := r.db.GetPollLike(pollName, pollsAmount)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get a poll by name")
+	}
+
+	if item == nil || item.Items == nil || len(item.Items) == 0 {
+		return nil, ErrPollIsNotFound
+	}
+
+	poll := new(domain.Poll)
+	if err := dynamodbattribute.UnmarshalMap(item.Items[0], poll); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal item")
+	}
+
+	return poll, nil
+}
+
 func (r *Repository) CreatePoll(pollName, owner string, items []string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
