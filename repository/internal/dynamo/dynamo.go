@@ -1,7 +1,6 @@
 package dynamo
 
 import (
-	"log"
 	"strconv"
 
 	"github.com/aws/aws-sdk-go/aws"
@@ -140,7 +139,6 @@ func (db DB) GetPollLike(subject string, limit int64) (*dynamodb.ScanOutput, err
 			},
 		},
 	})
-	log.Printf("POLL %+v", result)
 	if err != nil {
 		return nil, errors.Wrapf(err, "get poll with subject '%s' error", subject)
 	}
