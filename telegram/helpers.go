@@ -11,6 +11,13 @@ import (
 )
 
 func preparePollArticle(poll *domain.Poll) tgbot.InlineQueryResultArticle {
+	resultArticleMarkdown := tgbot.NewInlineQueryResultArticleMarkdown(poll.Subject, poll.Subject, poll.Subject)
+	resultArticleMarkdown.ReplyMarkup = preparePollKeyboardMarkup(poll)
+
+	return resultArticleMarkdown
+}
+
+func preparePollKeyboardMarkup(poll *domain.Poll) *tgbot.InlineKeyboardMarkup {
 	keyboard := new(tgbot.InlineKeyboardMarkup)
 	var row []tgbot.InlineKeyboardButton
 	for _, item := range poll.Items {
@@ -19,10 +26,7 @@ func preparePollArticle(poll *domain.Poll) tgbot.InlineQueryResultArticle {
 	}
 	keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, row)
 
-	resultArticleMarkdown := tgbot.NewInlineQueryResultArticleMarkdown(poll.Subject, poll.Subject, poll.Subject)
-	resultArticleMarkdown.ReplyMarkup = keyboard
-
-	return resultArticleMarkdown
+	return keyboard
 }
 
 // TODO: add FFJSON

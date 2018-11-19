@@ -31,7 +31,7 @@ var (
 	polls = make(map[int]*poll, 100)
 )
 
-type callbackID string
+type inlineMessageID string
 
 // TODO: implement Close()
 type Client struct {
@@ -40,11 +40,11 @@ type Client struct {
 	secureUserIDs []int
 	bot           *tgbot.BotAPI
 	store         store
-	pollUpdateCh  chan map[callbackID]*updatedPoll
+	pollUpdateCh  chan map[inlineMessageID]*updatedPoll
 }
 
 func Run(token, botName string, chatID int64, userIDs []int, store store) error {
-	client := &Client{botName: botName, chatID: chatID, secureUserIDs: userIDs, store: store, pollUpdateCh: make(chan map[callbackID]*updatedPoll)}
+	client := &Client{botName: botName, chatID: chatID, secureUserIDs: userIDs, store: store, pollUpdateCh: make(chan map[inlineMessageID]*updatedPoll)}
 	go client.syncPollData()
 	if err := client.init(token); err != nil {
 		return err
@@ -55,10 +55,7 @@ func Run(token, botName string, chatID int64, userIDs []int, store store) error 
 
 func (c *Client) syncPollData() {
 	for update := range c.pollUpdateCh {
-		log.Printf("UPDATE: %+v", update)
-		for id, updatedPoll := range update {
-			log.Printf("POLL: %s %+v", id, updatedPoll)
-
+		for inlineMessageID, updatedPoll := range update {
 			var votes string
 			for k, values := range updatedPoll.poll.Votes {
 				votes += "\n- " + k + ":\n"
@@ -67,9 +64,19 @@ func (c *Client) syncPollData() {
 				}
 			}
 
-			msg := tgbot.NewMessage(c.chatID, fmt.Sprintf("*New answers available:*\nSubject: %s\nLast Vote: %s\nVotes: \n```%s```", updatedPoll.poll.Subject, updatedPoll.voter, votes))
-			msg.ParseMode = parseMode
-			c.bot.Send(msg)
+			editMsg := tgbot.EditMessageTextConfig{
+				BaseEdit: tgbot.BaseEdit{
+					InlineMessageID: string(inlineMessageID),
+					ReplyMarkup:     preparePollKeyboardMarkup(updatedPoll.poll),
+				},
+				Text:                  fmt.Sprintf("*%s*\n\n---\nLast Vote: %s\nVotes: \n```%s```", updatedPoll.poll.Subject, updatedPoll.voter, votes),
+				ParseMode:             parseMode,
+				DisableWebPagePreview: true,
+			}
+
+			if _, err := c.bot.Send(editMsg); err != nil {
+				log.Printf("update message error: %s", err)
+			}
 		}
 	}
 }
@@ -243,18 +250,11 @@ func (c Client) processInlineRequest(inline *tgbot.InlineQuery) error {
 		Results:       resultArticlesMarkdown,
 	}
 
-	inlineResp, err := c.bot.AnswerInlineQuery(inlineConfig)
+	_, err := c.bot.AnswerInlineQuery(inlineConfig)
 	if err != nil {
 		return errors.Wrap(err, "answer inline error")
 	}
 
-	// msgResp, err := c.bot.Send(tgbot.NewMessage(c.chatID, ""))
-	_, err = c.bot.Send(tgbot.NewMessage(c.chatID, ""))
-	if err != nil {
-		return errors.Wrap(err, "can't send a message on inline query")
-	}
-	log.Println("!#$", inlineResp)
-	// msgResp.MessageID
 	return nil
 }
 
@@ -281,8 +281,8 @@ func (c Client) processCallbackRequest(callback *tgbot.CallbackQuery) error {
 		return errors.Wrap(err, "answer callback error")
 	}
 
-	c.pollUpdateCh <- map[callbackID]*updatedPoll{
-		callbackID(callback.ID): {
+	c.pollUpdateCh <- map[inlineMessageID]*updatedPoll{
+		inlineMessageID(callback.InlineMessageID): {
 			voter: callback.From.String(),
 			poll:  poll,
 		},
