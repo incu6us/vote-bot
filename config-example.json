@@ -1,6 +1,15 @@
 {
   "region": "eu-central-1",
-  "dynamo":{
-    "table":"polls"
+  "dynamo": {
+    "table": "polls"
+  },
+  "telegram": {
+    "token": "bot-token",
+    "bot_name":"bot-name",
+    "user_ids": [
+      {
+        "some-user-name": 161500345
+      }
+    ]
   }
 }

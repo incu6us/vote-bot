@@ -66,12 +66,6 @@ func main() {
 		}
 	}
 
-	chatID := cfg.GetInt64("telegram.chat_id")
-	if chatID == 0 {
-		log.Printf("telegram chatID is not set")
-		return
-	}
-
 	// awsCfg := aws.NewConfig().WithRegion(region).WithCredentials(credentials.NewEnvCredentials())
 	//
 	// sess, err := session.NewSession(awsCfg)
@@ -212,5 +206,5 @@ func main() {
 	// }
 	// log.Println("poll updated")
 
-	log.Printf("telegram start failed: %s\n", telegram.Run(telegramToken, botName, chatID, userIDs, repo))
+	log.Printf("telegram start failed: %s\n", telegram.Run(telegramToken, botName, userIDs, repo))
 }

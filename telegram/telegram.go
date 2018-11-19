@@ -36,15 +36,14 @@ type inlineMessageID string
 // TODO: implement Close()
 type Client struct {
 	botName       string
-	chatID        int64
 	secureUserIDs []int
 	bot           *tgbot.BotAPI
 	store         store
 	pollUpdateCh  chan map[inlineMessageID]*updatedPoll
 }
 
-func Run(token, botName string, chatID int64, userIDs []int, store store) error {
-	client := &Client{botName: botName, chatID: chatID, secureUserIDs: userIDs, store: store, pollUpdateCh: make(chan map[inlineMessageID]*updatedPoll)}
+func Run(token, botName string, userIDs []int, store store) error {
+	client := &Client{botName: botName, secureUserIDs: userIDs, store: store, pollUpdateCh: make(chan map[inlineMessageID]*updatedPoll)}
 	go client.syncPollData()
 	if err := client.init(token); err != nil {
 		return err
