@@ -4,7 +4,7 @@ PROJECT_NAME := vote-bot
 CONFIG_PATH := "."
 
 
-all: build
+all: container run
 
 build:
 	@go mod tidy && go build -v
