@@ -13,4 +13,4 @@ container:
 	@docker build -t ${PROJECT_NAME} .
 
 run:
-	@docker run -d -v ${CONFIG_PATH}/config.json:/app/config.json --build-arg AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} --build-arg AWS_ACCESS_KEY=${AWS_ACCESS_KEY} --name vote-bot vote-bot
+	@docker run -d -v ${CONFIG_PATH}/config.json:/app/config.json --build-arg AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID} --build-arg AWS_ACCESS_KEY=${AWS_ACCESS_KEY} --name ${PROJECT_NAME} ${PROJECT_NAME}
