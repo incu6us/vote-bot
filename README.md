@@ -33,3 +33,7 @@ Description:
 ### Create a poll
    To create poll use example below:
    ![Create poll](https://raw.githubusercontent.com/incu6us/vote-bot/master/doc/images/create_poll.png)
+   
+### Publish a poll
+   To publish a poll you just need to type its name in group in which it is connected. After 4th symbol you'll find a popup with the poll.
+   ![Publish poll](https://raw.githubusercontent.com/incu6us/vote-bot/master/doc/images/publish_poll.png) 
