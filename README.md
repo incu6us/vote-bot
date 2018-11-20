@@ -1,52 +1,35 @@
 vote-bot
 ---
 
-Telegram bot for voting based on AWS serverless engines
+Telegram bot for voting based on AWS DynamoDB
 
-### DynamoDB schema:
-```
-{
-  Table: {
-    AttributeDefinitions: [{
-        AttributeName: "created_at",
-        AttributeType: "N"
-      },{
-        AttributeName: "kind",
-        AttributeType: "S"
-      }],
-    ItemCount: 0,
-    KeySchema: [{
-        AttributeName: "kind",
-        KeyType: "HASH"
-      },{
-        AttributeName: "created_at",
-        KeyType: "RANGE"
-      }],
-    TableName: "polls",
-  }
-}
-```
 
+### Configuration
 ```json
 {
-  "created_at": {
-    "N": "1542129390866608000"
+  "region": "eu-central-1",
+  "dynamo": {
+    "table": "polls"
   },
-  "items": {
-    "L": [
+  "telegram": {
+    "token": "bot-token",
+    "bot_name":"bot-name",
+    "user_ids": [
       {
-        "S": "yes"
-      },
-      {
-        "S": "no"
+        "some-user-name": 161500345
       }
     ]
-  },
-  "kind": {
-    "S": "poll"
-  },
-  "subject": {
-    "S": "test poll"
   }
 }
 ```
+
+Description:
+   * region - AWS region in which the dynamo's table shold be created
+   * dynamo - setting for DynamoDB
+   * telegram - Telegram settings
+   * telegram.user_ids - users with IDs which will have an access to create a polls. User's key could be anything you want, but not th ID
+   
+   
+### Create a poll
+   To create poll use example below:
+    
