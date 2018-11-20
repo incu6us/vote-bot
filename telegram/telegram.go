@@ -15,12 +15,12 @@ import (
 type store interface {
 	GetPolls() ([]*domain.Poll, error)
 	GetPoll(pollName string) (*domain.Poll, error)
-	GetPollLike(pollName string) (*domain.Poll, error)
+	GetPollBeginsWith(pollName string) (*domain.Poll, error)
 	CreatePoll(pollName, owner string, items []string) error
 	DeletePoll(pollName, owner string) error
 	UpdatePollIsPublished(pollName, owner string, isPublished bool) error
 	UpdatePollItems(pollName, owner string, items []string) error
-	UpdateVote(pollName, item, user string) (*domain.Poll, error)
+	UpdateVote(createdAt int64, item, user string) (*domain.Poll, error)
 }
 
 const (
@@ -213,13 +213,11 @@ func (c Client) userHasAccess(userID int) bool {
 }
 
 func (c Client) processInlineRequest(inline *tgbot.InlineQuery) error {
-	log.Printf("inline: %+v", inline)
-
 	if len(inline.Query) <= 3 {
 		return nil
 	}
 
-	poll, err := c.store.GetPollLike(inline.Query)
+	poll, err := c.store.GetPollBeginsWith(inline.Query)
 	if err != nil {
 		if err == repository.ErrPollIsNotFound {
 			return nil
@@ -253,10 +251,12 @@ func (c Client) processCallbackRequest(callback *tgbot.CallbackQuery) error {
 		return errors.Wrap(err, "get callback data error")
 	}
 
-	poll, err := c.store.UpdateVote(callbackData.PollName, callbackData.Vote, callback.From.String())
+	poll, err := c.store.UpdateVote(callbackData.CreatedAt, callbackData.Vote, callback.From.String())
 	if err != nil {
 		return errors.Wrap(err, "update vote failed")
 	}
+
+	log.Printf("POLL: %+v", poll)
 
 	callbackConfig := tgbot.CallbackConfig{
 		CallbackQueryID: callback.ID,

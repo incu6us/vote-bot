@@ -122,7 +122,7 @@ func (db DB) GetPoll(subject string) (*dynamodb.QueryOutput, error) {
 	return result, nil
 }
 
-func (db DB) GetPollLike(subject string, limit int64) (*dynamodb.ScanOutput, error) {
+func (db DB) GetPollBeginsWith(subject string, limit int64) (*dynamodb.ScanOutput, error) {
 	if subject == "" {
 		return nil, ErrBadPollName
 	}
@@ -141,6 +141,30 @@ func (db DB) GetPollLike(subject string, limit int64) (*dynamodb.ScanOutput, err
 	})
 	if err != nil {
 		return nil, errors.Wrapf(err, "get poll with subject '%s' error", subject)
+	}
+
+	return result, nil
+}
+
+func (db DB) GetPollByCreatedAt(createdAt int64) (*dynamodb.ScanOutput, error) {
+	if createdAt == 0 {
+		return nil, ErrBadPollName
+	}
+
+	result, err := db.client.Scan(&dynamodb.ScanInput{
+		TableName: aws.String(db.tableName),
+		Limit:     aws.Int64(1),
+		ScanFilter: map[string]*dynamodb.Condition{
+			"created_at": {
+				ComparisonOperator: aws.String("EQ"),
+				AttributeValueList: []*dynamodb.AttributeValue{
+					{N: aws.String(strconv.FormatInt(createdAt, 10))},
+				},
+			},
+		},
+	})
+	if err != nil {
+		return nil, errors.Wrapf(err, "get poll with created_at field '%s' error", createdAt)
 	}
 
 	return result, nil

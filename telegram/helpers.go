@@ -3,6 +3,7 @@ package telegram
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"vote-bot/domain"
 
 	"github.com/pkg/errors"
@@ -10,8 +11,17 @@ import (
 	tgbot "github.com/go-telegram-bot-api/telegram-bot-api"
 )
 
+const (
+	inlineButtonLenght = 32
+)
+
 func preparePollArticle(poll *domain.Poll) tgbot.InlineQueryResultArticle {
-	resultArticleMarkdown := tgbot.NewInlineQueryResultArticleMarkdown(poll.Subject, poll.Subject, poll.Subject)
+	id := strconv.FormatInt(poll.CreatedAt, 10)
+	subject := poll.Subject
+	if len(subject) >= inlineButtonLenght {
+		subject = poll.Subject[:inlineButtonLenght] + "..."
+	}
+	resultArticleMarkdown := tgbot.NewInlineQueryResultArticleMarkdown(id, subject, poll.Subject)
 	resultArticleMarkdown.ReplyMarkup = preparePollKeyboardMarkup(poll)
 
 	return resultArticleMarkdown
@@ -21,7 +31,7 @@ func preparePollKeyboardMarkup(poll *domain.Poll) *tgbot.InlineKeyboardMarkup {
 	keyboard := new(tgbot.InlineKeyboardMarkup)
 	var row []tgbot.InlineKeyboardButton
 	for _, item := range poll.Items {
-		btn := tgbot.NewInlineKeyboardButtonData(item, prepareCallbackData(poll.Subject, item))
+		btn := tgbot.NewInlineKeyboardButtonData(item, prepareCallbackData(poll.CreatedAt, item))
 		row = append(row, btn)
 	}
 	keyboard.InlineKeyboard = append(keyboard.InlineKeyboard, row)
@@ -30,8 +40,8 @@ func preparePollKeyboardMarkup(poll *domain.Poll) *tgbot.InlineKeyboardMarkup {
 }
 
 // TODO: add FFJSON
-func prepareCallbackData(pollName, vote string) string {
-	data, _ := json.Marshal(callbackData{PollName: pollName, Vote: vote})
+func prepareCallbackData(createdAt int64, vote string) string {
+	data, _ := json.Marshal(callbackData{CreatedAt: createdAt, Vote: vote})
 	return string(data)
 }
 

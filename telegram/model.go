@@ -8,8 +8,8 @@ type poll struct {
 }
 
 type callbackData struct {
-	PollName string `json:"poll_name"`
-	Vote     string `json:"vote"`
+	CreatedAt int64  `json:"created_at"`
+	Vote      string `json:"vote"`
 }
 
 type updatedPoll struct {

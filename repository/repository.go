@@ -61,11 +61,11 @@ func (r *Repository) GetPoll(pollName string) (*domain.Poll, error) {
 	return r.getPoll(pollName)
 }
 
-func (r *Repository) GetPollLike(pollName string) (*domain.Poll, error) {
+func (r *Repository) GetPollBeginsWith(pollName string) (*domain.Poll, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	item, err := r.db.GetPollLike(pollName, pollsAmount)
+	item, err := r.db.GetPollBeginsWith(pollName, pollsAmount)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get a poll by name")
 	}
@@ -174,11 +174,11 @@ func (r *Repository) UpdatePollItems(pollName, owner string, items []string) err
 	return r.db.UpdateItems(pollName, poll.CreatedAt, items)
 }
 
-func (r *Repository) UpdateVote(pollName, item, voter string) (*domain.Poll, error) {
+func (r *Repository) UpdateVote(createdAt int64, item, voter string) (*domain.Poll, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	poll, err := r.getPoll(pollName)
+	poll, err := r.getPollByCreatedAt(createdAt)
 	if err != nil {
 		return nil, errors.Wrap(err, "get poll failed")
 	}
@@ -213,7 +213,7 @@ func (r *Repository) UpdateVote(pollName, item, voter string) (*domain.Poll, err
 		return nil, errors.Wrap(err, "failed to marshal votes")
 	}
 
-	if err := r.db.UpdateVotes(pollName, poll.CreatedAt, voteAttributes); err != nil {
+	if err := r.db.UpdateVotes(poll.Subject, poll.CreatedAt, voteAttributes); err != nil {
 		return nil, errors.Wrap(err, "failed to update vote in database")
 	}
 
@@ -233,6 +233,24 @@ func (r Repository) convertMapToPoll(items ...map[string]*dynamodb.AttributeValu
 	}
 
 	return polls, nil
+}
+
+func (r Repository) getPollByCreatedAt(createdAt int64) (*domain.Poll, error) {
+	item, err := r.db.GetPollByCreatedAt(createdAt)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to get a poll by name")
+	}
+
+	if item == nil || item.Items == nil || len(item.Items) == 0 {
+		return nil, ErrPollIsNotFound
+	}
+
+	poll := new(domain.Poll)
+	if err := dynamodbattribute.UnmarshalMap(item.Items[0], poll); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal item")
+	}
+
+	return poll, nil
 }
 
 func (r Repository) getPoll(pollName string) (*domain.Poll, error) {
