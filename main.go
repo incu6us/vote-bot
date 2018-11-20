@@ -72,12 +72,11 @@ func main() {
 		return
 	}
 
-	_, err = repo.DescribeTable()
-	if err != nil {
+	if _, err := repo.DescribeTable(); err != nil {
 		if awsErr, ok := errors.Cause(err).(awserr.Error); ok {
 			switch awsErr.Code() {
 			case dynamodb.ErrCodeResourceNotFoundException:
-				if err1 := repo.CreateTable(); err != nil {
+				if err1 := repo.CreateTable(); err1 != nil {
 					log.Printf("create table error: %s", err1)
 				}
 				log.Println("table created")

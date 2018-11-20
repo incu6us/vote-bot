@@ -45,7 +45,7 @@ type Client struct {
 
 func Run(token, botName string, userIDs []int, store store) error {
 	client := &Client{botName: botName, secureUserIDs: userIDs, store: store, pollUpdateCh: make(chan map[inlineMessageID]*updatedPoll)}
-	go client.syncPollData()
+	go client.processPollAnswers()
 	if err := client.init(token); err != nil {
 		return err
 	}
@@ -53,7 +53,7 @@ func Run(token, botName string, userIDs []int, store store) error {
 	return nil
 }
 
-func (c *Client) syncPollData() {
+func (c *Client) processPollAnswers() {
 	for update := range c.pollUpdateCh {
 		for inlineMessageID, updatedPoll := range update {
 			var votes string
