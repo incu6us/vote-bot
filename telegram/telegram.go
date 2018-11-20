@@ -7,9 +7,8 @@ import (
 	"vote-bot/domain"
 	"vote-bot/repository"
 
-	"github.com/pkg/errors"
-
 	tgbot "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/pkg/errors"
 )
 
 type store interface {

@@ -6,20 +6,19 @@ import (
 	"strconv"
 	"vote-bot/domain"
 
-	"github.com/pkg/errors"
-
 	tgbot "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/pkg/errors"
 )
 
 const (
-	inlineButtonLenght = 32
+	inlineButtonLength = 32
 )
 
 func preparePollArticle(poll *domain.Poll) tgbot.InlineQueryResultArticle {
 	id := strconv.FormatInt(poll.CreatedAt, 10)
 	subject := poll.Subject
-	if len(subject) >= inlineButtonLenght {
-		subject = poll.Subject[:inlineButtonLenght] + "..."
+	if len(subject) >= inlineButtonLength {
+		subject = poll.Subject[:inlineButtonLength] + "..."
 	}
 	resultArticleMarkdown := tgbot.NewInlineQueryResultArticleMarkdown(id, subject, poll.Subject)
 	resultArticleMarkdown.ReplyMarkup = preparePollKeyboardMarkup(poll)
