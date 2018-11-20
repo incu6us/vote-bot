@@ -5,6 +5,8 @@ Telegram bot for voting based on AWS DynamoDB
 
 
 ### Configuration
+   Create configuration file `config.json` with the content:
+    
 ```json
 {
   "region": "eu-central-1",
