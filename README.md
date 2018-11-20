@@ -32,4 +32,4 @@ Description:
    
 ### Create a poll
    To create poll use example below:
-    
+   ![Create poll](https://github.com/incu6us/vote-bot/tree/master/doc/images/create_poll.png)
