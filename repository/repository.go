@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"log"
 	"sync"
 	"time"
 	"vote-bot/domain"
@@ -236,18 +237,19 @@ func (r Repository) convertMapToPoll(items ...map[string]*dynamodb.AttributeValu
 }
 
 func (r Repository) getPollByCreatedAt(createdAt int64) (*domain.Poll, error) {
-	item, err := r.db.GetPollByCreatedAt(createdAt)
+	items, err := r.db.GetPollByCreatedAt(createdAt, pollsAmount)
 	if err != nil {
-		return nil, errors.Wrap(err, "failed to get a poll by name")
+		return nil, errors.Wrap(err, "failed to get a poll by created_at field")
 	}
 
-	if item == nil || item.Items == nil || len(item.Items) == 0 {
+	log.Printf("ITEM: %+v", items)
+	if items == nil || items.Items == nil || len(items.Items) == 0 {
 		return nil, ErrPollIsNotFound
 	}
 
 	poll := new(domain.Poll)
-	if err := dynamodbattribute.UnmarshalMap(item.Items[0], poll); err != nil {
-		return nil, errors.Wrap(err, "failed to unmarshal item")
+	if err := dynamodbattribute.UnmarshalMap(items.Items[0], poll); err != nil {
+		return nil, errors.Wrap(err, "failed to unmarshal items")
 	}
 
 	return poll, nil

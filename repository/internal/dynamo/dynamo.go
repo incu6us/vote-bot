@@ -146,14 +146,14 @@ func (db DB) GetPollBeginsWith(subject string, limit int64) (*dynamodb.ScanOutpu
 	return result, nil
 }
 
-func (db DB) GetPollByCreatedAt(createdAt int64) (*dynamodb.ScanOutput, error) {
+func (db DB) GetPollByCreatedAt(createdAt, limit int64) (*dynamodb.ScanOutput, error) {
 	if createdAt == 0 {
 		return nil, ErrBadPollName
 	}
 
 	result, err := db.client.Scan(&dynamodb.ScanInput{
 		TableName: aws.String(db.tableName),
-		Limit:     aws.Int64(1),
+		Limit:     aws.Int64(limit),
 		ScanFilter: map[string]*dynamodb.Condition{
 			"created_at": {
 				ComparisonOperator: aws.String("EQ"),

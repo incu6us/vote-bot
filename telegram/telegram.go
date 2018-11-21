@@ -68,9 +68,8 @@ func (c *Client) processPollAnswers() {
 					InlineMessageID: string(inlineMessageID),
 					ReplyMarkup:     preparePollKeyboardMarkup(updatedPoll.poll),
 				},
-				Text:                  fmt.Sprintf("*%s*\n\n---\nLast Vote: %s\nVotes: \n```%s```", updatedPoll.poll.Subject, updatedPoll.voter, votes),
-				ParseMode:             parseMode,
-				DisableWebPagePreview: true,
+				Text:      fmt.Sprintf("*%s*\n\n---\nLast Vote: %s\nVotes: \n```%s```", updatedPoll.poll.Subject, updatedPoll.voter, votes),
+				ParseMode: parseMode,
 			}
 
 			if _, err := c.bot.Send(editMsg); err != nil {
@@ -101,7 +100,10 @@ func (c *Client) init(token string) error {
 
 	for update := range updateCh {
 		if update.Message == nil && update.CallbackQuery != nil {
-			c.processCallbackRequest(update.CallbackQuery)
+			if err := c.processCallbackRequest(update.CallbackQuery); err != nil {
+				log.Printf("prccess callback error: %s", err)
+				continue
+			}
 		}
 
 		if update.Message == nil && update.InlineQuery != nil {

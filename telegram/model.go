@@ -24,7 +24,7 @@ type userID int
 
 // pollsMemStore uses for temporary storing polls from commands until it persistence after '/done'-command
 type pollsMemStore struct {
-	sync.RWMutex
+	rwMu  sync.RWMutex
 	polls map[userID]*poll
 }
 
@@ -35,22 +35,22 @@ func newPollsMemStore() *pollsMemStore {
 }
 
 func (p *pollsMemStore) Load(key userID) *poll {
-	p.RLock()
-	defer p.RUnlock()
+	p.rwMu.RLock()
+	defer p.rwMu.RUnlock()
 
 	return p.polls[key]
 }
 
 func (p *pollsMemStore) Store(key userID, poll *poll) {
-	p.Lock()
-	defer p.Unlock()
+	p.rwMu.Lock()
+	defer p.rwMu.Unlock()
 
 	p.polls[key] = poll
 }
 
 func (p *pollsMemStore) Delete(key userID) {
-	p.Lock()
-	defer p.Unlock()
+	p.rwMu.Lock()
+	defer p.rwMu.Unlock()
 
 	delete(p.polls, key)
 }
