@@ -12,10 +12,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	pollsAmount = 10
-)
-
 var (
 	ErrPollIsNotFound   = errors.New("poll is not found")
 	ErrPollAlreadyExist = errors.New("poll already exist")
@@ -47,7 +43,7 @@ func (r *Repository) GetPolls() ([]*domain.Poll, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	result, err := r.db.GetPolls(pollsAmount)
+	result, err := r.db.GetPolls()
 	if err != nil {
 		return nil, errors.Wrap(err, "can't get polls from repository")
 	}
@@ -66,7 +62,7 @@ func (r *Repository) GetPollBeginsWith(pollName string) (*domain.Poll, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	item, err := r.db.GetPollBeginsWith(pollName, pollsAmount)
+	item, err := r.db.GetPollBeginsWith(pollName)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get a poll by name")
 	}
@@ -237,7 +233,7 @@ func (r Repository) convertMapToPoll(items ...map[string]*dynamodb.AttributeValu
 }
 
 func (r Repository) getPollByCreatedAt(createdAt int64) (*domain.Poll, error) {
-	items, err := r.db.GetPollByCreatedAt(createdAt, pollsAmount)
+	items, err := r.db.GetPollByCreatedAt(createdAt)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get a poll by created_at field")
 	}

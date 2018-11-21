@@ -12,7 +12,6 @@ import (
 
 var (
 	ErrBadPollName = errors.New("bad poll name")
-	ErrBadLimit    = errors.New("get poll limit with 0 row can't be done")
 )
 
 type DB struct {
@@ -71,14 +70,9 @@ func (db DB) DescribeTable() (string, error) {
 	return result.String(), nil
 }
 
-func (db DB) GetPolls(limitRows int64) (*dynamodb.ScanOutput, error) {
-	if limitRows == 0 {
-		return nil, ErrBadLimit
-	}
-
+func (db DB) GetPolls() (*dynamodb.ScanOutput, error) {
 	result, err := db.client.Scan(&dynamodb.ScanInput{
 		TableName: aws.String(db.tableName),
-		Limit:     aws.Int64(limitRows),
 		ScanFilter: map[string]*dynamodb.Condition{
 			"subject": {
 				ComparisonOperator: aws.String("NOT_NULL"),
@@ -122,14 +116,13 @@ func (db DB) GetPoll(subject string) (*dynamodb.QueryOutput, error) {
 	return result, nil
 }
 
-func (db DB) GetPollBeginsWith(subject string, limit int64) (*dynamodb.ScanOutput, error) {
+func (db DB) GetPollBeginsWith(subject string) (*dynamodb.ScanOutput, error) {
 	if subject == "" {
 		return nil, ErrBadPollName
 	}
 
 	result, err := db.client.Scan(&dynamodb.ScanInput{
 		TableName: aws.String(db.tableName),
-		Limit:     aws.Int64(limit),
 		ScanFilter: map[string]*dynamodb.Condition{
 			"subject": {
 				ComparisonOperator: aws.String("BEGINS_WITH"),
@@ -146,14 +139,13 @@ func (db DB) GetPollBeginsWith(subject string, limit int64) (*dynamodb.ScanOutpu
 	return result, nil
 }
 
-func (db DB) GetPollByCreatedAt(createdAt, limit int64) (*dynamodb.ScanOutput, error) {
+func (db DB) GetPollByCreatedAt(createdAt int64) (*dynamodb.ScanOutput, error) {
 	if createdAt == 0 {
 		return nil, ErrBadPollName
 	}
 
 	result, err := db.client.Scan(&dynamodb.ScanInput{
 		TableName: aws.String(db.tableName),
-		Limit:     aws.Int64(limit),
 		ScanFilter: map[string]*dynamodb.Condition{
 			"created_at": {
 				ComparisonOperator: aws.String("EQ"),
