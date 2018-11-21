@@ -23,12 +23,12 @@ type store interface {
 }
 
 const (
-	debug     = true
+	isDebug   = true
 	parseMode = "markdown"
 )
 
 var (
-	polls = make(map[int]*poll, 100)
+	polls = newPollsMemStore()
 )
 
 type inlineMessageID string
@@ -87,7 +87,7 @@ func (c *Client) init(token string) error {
 		return errors.Wrap(err, "telegram bot initialization failed")
 	}
 
-	c.bot.Debug = debug
+	c.bot.Debug = isDebug
 	log.Printf("Authorized on account %s", c.bot.Self.UserName)
 
 	updateConfig := tgbot.NewUpdate(0)
@@ -133,37 +133,37 @@ func (c *Client) init(token string) error {
 				c.bot.Send(msg)
 				continue
 			case "cancel":
-				delete(polls, update.Message.From.ID)
+				polls.Delete(userID(update.Message.From.ID))
 				c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "Canceled"))
 				continue
 			case "done":
-				poll, ok := polls[update.Message.From.ID]
-				if !ok {
+				poll := polls.Load(userID(update.Message.From.ID))
+				if poll == nil {
 					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "No such poll"))
 					continue
 				}
 
 				if poll.pollName == "" || len(poll.items) == 0 {
-					delete(polls, update.Message.From.ID)
+					polls.Delete(userID(update.Message.From.ID))
 					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "Poll name and items should be set. Try again to create a new poll"))
 					continue
 				}
 
 				if err := c.store.CreatePoll(poll.pollName, poll.owner, poll.items); err != nil {
-					delete(polls, update.Message.From.ID)
+					polls.Delete(userID(update.Message.From.ID))
 					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Poll creation error: %s", err)))
 					continue
 				}
 
-				delete(polls, update.Message.From.ID)
+				polls.Delete(userID(update.Message.From.ID))
 
 				msg := tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Poll created. Use `@%s %s`", c.botName, poll.pollName))
 				msg.ParseMode = parseMode
 				c.bot.Send(msg)
 				continue
 			case "newpoll":
-				if _, ok := polls[update.Message.From.ID]; !ok {
-					polls[update.Message.From.ID] = &poll{owner: fmt.Sprintf("(%d) %s", update.Message.From.ID, update.Message.From.String())}
+				if prestoredPoll := polls.Load(userID(update.Message.From.ID)); prestoredPoll == nil {
+					polls.Store(userID(update.Message.From.ID), &poll{owner: getOwner(update.Message.From.ID, update.Message.From.String())})
 				}
 				msg := tgbot.NewMessage(update.Message.Chat.ID, "Enter a poll name")
 				c.bot.Send(msg)
@@ -183,14 +183,16 @@ func (c *Client) init(token string) error {
 				continue
 			}
 
-			if _, ok := polls[update.Message.From.ID]; ok {
-				if polls[update.Message.From.ID].pollName == "" {
-					polls[update.Message.From.ID].pollName = update.Message.Text
+			if prestoredPoll := polls.Load(userID(update.Message.From.ID)); prestoredPoll != nil {
+				if prestoredPoll.pollName == "" {
+					polls.Store(userID(update.Message.From.ID), &poll{pollName: update.Message.Text, items: []string{}, owner: getOwner(update.Message.From.ID, update.Message.From.String())})
 					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "put items"))
 					continue
 				}
 
-				polls[update.Message.From.ID].items = append(polls[update.Message.From.ID].items, update.Message.Text)
+				items := make([]string, 0)
+				items = append(prestoredPoll.items, update.Message.Text)
+				polls.Store(userID(update.Message.From.ID), &poll{pollName: prestoredPoll.pollName, items: items, owner: getOwner(update.Message.From.ID, update.Message.From.String())})
 				msg := tgbot.NewMessage(update.Message.Chat.ID, "- put items;\n- `/done` - to complete the poll creation;\n- `/cancel` - to cancel the poll creation")
 				msg.ParseMode = parseMode
 				c.bot.Send(msg)

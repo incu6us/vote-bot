@@ -56,3 +56,7 @@ func serializeCallbackData(data string) (*callbackData, error) {
 func msgYouHaveNoAccess(id int64) string {
 	return fmt.Sprintf("You have no access to the bot with userID: %d", id)
 }
+
+func getOwner(id int, name string) string {
+	return fmt.Sprintf("(%d) %s", id, name)
+}
