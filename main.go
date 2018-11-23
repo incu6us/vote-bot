@@ -1,7 +1,11 @@
 package main
 
 import (
+	"io"
 	"log"
+	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
@@ -21,7 +25,6 @@ func config() (*cfg.Config, error) {
 }
 
 func main() {
-
 	cfg, err := config()
 	if err != nil {
 		log.Printf("failed to read config file: %s", err)
@@ -86,5 +89,31 @@ func main() {
 		}
 	}
 
-	log.Printf("bot start failed: %s\n", telegram.Run(telegramToken, botName, userIDs, repo))
+	bot, err := telegram.New(telegramToken, botName, userIDs, repo)
+	if err != nil {
+		log.Printf("bot creation error: %s\n", err)
+		return
+	}
+
+	go shutdown(bot)
+
+	if err := bot.Run(); err != nil {
+		log.Printf("bot start failed: %s\n", err)
+	}
+}
+
+func shutdown(c io.Closer) {
+	signalCh := make(chan os.Signal, 1)
+
+	signal.Notify(signalCh,
+		syscall.SIGTERM,
+		syscall.SIGINT,
+		syscall.SIGQUIT,
+		syscall.SIGHUP,
+	)
+
+	<-signalCh
+	log.Println("Shutting down...")
+
+	c.Close()
 }
