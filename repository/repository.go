@@ -4,11 +4,11 @@ import (
 	"log"
 	"sync"
 	"time"
-	"vote-bot/domain"
-	"vote-bot/repository/internal/dynamo"
 
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	"github.com/aws/aws-sdk-go/service/dynamodb/dynamodbattribute"
+	"github.com/incu6us/vote-bot/domain"
+	"github.com/incu6us/vote-bot/repository/internal/dynamo"
 	"github.com/pkg/errors"
 )
 

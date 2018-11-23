@@ -4,9 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"strconv"
-	"vote-bot/domain"
+	"strings"
 
 	tgbot "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/incu6us/vote-bot/domain"
 	"github.com/pkg/errors"
 )
 
@@ -20,7 +21,7 @@ func preparePollArticle(poll *domain.Poll) tgbot.InlineQueryResultArticle {
 	if len(subject) >= inlineButtonLength {
 		subject = poll.Subject[:inlineButtonLength] + "..."
 	}
-	resultArticleMarkdown := tgbot.NewInlineQueryResultArticleMarkdown(id, subject, poll.Subject)
+	resultArticleMarkdown := tgbot.NewInlineQueryResultArticleMarkdown(id, subject, escapeURLMarkdownSymbols(poll.Subject))
 	resultArticleMarkdown.ReplyMarkup = preparePollKeyboardMarkup(poll)
 
 	return resultArticleMarkdown
@@ -59,4 +60,33 @@ func msgYouHaveNoAccess(id int64) string {
 
 func getOwner(id int, name string) string {
 	return fmt.Sprintf("(%d) %s", id, name)
+}
+
+func escapeURLMarkdownSymbols(msg string) string {
+	if !strings.Contains(msg, "http://") && !strings.Contains(msg, "https://") {
+		return msg
+	}
+
+	escapeChars := []string{"_", "*"}
+	separator := " "
+	httpSeparator := "http"
+
+	words := strings.Split(msg, separator)
+	for k, word := range words {
+		if !strings.Contains(word, "http://") && !strings.Contains(word, "https://") {
+			continue
+		}
+		httpAddrSlices := strings.Split(word, httpSeparator)
+		for i := 1; i < len(httpAddrSlices[0:]); i++ {
+			if !strings.HasPrefix(httpAddrSlices[i], "://") && !strings.HasPrefix(httpAddrSlices[i], "s://") {
+				continue
+			}
+			for _, escapeChar := range escapeChars {
+				httpAddrSlices[i] = strings.Replace(httpAddrSlices[i], escapeChar, "\\"+escapeChar, -1)
+			}
+			words[k] = strings.Join(httpAddrSlices, httpSeparator)
+		}
+	}
+
+	return strings.Join(words, separator)
 }

@@ -2,13 +2,12 @@ package main
 
 import (
 	"log"
-	"vote-bot/telegram"
-
-	cfg "vote-bot/config"
-	"vote-bot/repository"
 
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
+	cfg "github.com/incu6us/vote-bot/config"
+	"github.com/incu6us/vote-bot/repository"
+	"github.com/incu6us/vote-bot/telegram"
 	"github.com/pkg/errors"
 )
 

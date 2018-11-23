@@ -2,7 +2,16 @@ package telegram
 
 import (
 	"sync"
-	"vote-bot/domain"
+
+	"github.com/incu6us/vote-bot/domain"
+)
+
+type parseModeType string
+
+const (
+	markdownParseMode parseModeType = "markdown"
+	htmlParseMode                   = "html"
+	noneParseMode                   = ""
 )
 
 type poll struct {

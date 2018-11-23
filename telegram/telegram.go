@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"vote-bot/domain"
-	"vote-bot/repository"
 
 	tgbot "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/incu6us/vote-bot/domain"
+	"github.com/incu6us/vote-bot/repository"
 	"github.com/pkg/errors"
 )
 
@@ -24,7 +24,7 @@ type store interface {
 
 const (
 	isDebug   = true
-	parseMode = "markdown"
+	parseMode = markdownParseMode
 )
 
 var (
@@ -35,25 +35,28 @@ type inlineMessageID string
 
 // TODO: implement Close()
 type Client struct {
-	botName       string
-	secureUserIDs []int
-	bot           *tgbot.BotAPI
-	store         store
-	pollUpdateCh  chan map[inlineMessageID]*updatedPoll
+	botName         string
+	secureUserIDs   []int
+	bot             *tgbot.BotAPI
+	store           store
+	updatePollCh    chan map[inlineMessageID]*updatedPoll
+	updateMessageCh tgbot.UpdatesChannel
 }
 
 func Run(token, botName string, userIDs []int, store store) error {
-	client := &Client{botName: botName, secureUserIDs: userIDs, store: store, pollUpdateCh: make(chan map[inlineMessageID]*updatedPoll)}
-	go client.processPollAnswers()
+	client := &Client{botName: botName, secureUserIDs: userIDs, store: store, updatePollCh: make(chan map[inlineMessageID]*updatedPoll)}
 	if err := client.init(token); err != nil {
 		return err
 	}
 
+	go client.updatePollAnswers()
+	client.messageListen()
+
 	return nil
 }
 
-func (c *Client) processPollAnswers() {
-	for update := range c.pollUpdateCh {
+func (c *Client) updatePollAnswers() {
+	for update := range c.updatePollCh {
 		for inlineMessageID, updatedPoll := range update {
 			var votes string
 			for k, values := range updatedPoll.poll.Votes {
@@ -68,8 +71,8 @@ func (c *Client) processPollAnswers() {
 					InlineMessageID: string(inlineMessageID),
 					ReplyMarkup:     preparePollKeyboardMarkup(updatedPoll.poll),
 				},
-				Text:      fmt.Sprintf("*%s*\n\n---\nLast Vote: %s\nVotes: \n```%s```", updatedPoll.poll.Subject, updatedPoll.voter, votes),
-				ParseMode: parseMode,
+				Text:      fmt.Sprintf("%s\n---\nLast Vote: %s\nVotes: \n```%s```", escapeURLMarkdownSymbols(updatedPoll.poll.Subject), updatedPoll.voter, votes),
+				ParseMode: string(parseMode),
 			}
 
 			if _, err := c.bot.Send(editMsg); err != nil {
@@ -92,15 +95,18 @@ func (c *Client) init(token string) error {
 	updateConfig := tgbot.NewUpdate(0)
 	updateConfig.Timeout = 60
 
-	updateCh, err := c.bot.GetUpdatesChan(updateConfig)
+	c.updateMessageCh, err = c.bot.GetUpdatesChan(updateConfig)
 	if err != nil {
-		log.Printf("get updates failed: %s", err)
 		return errors.Wrap(err, "get updates failed")
 	}
 
-	for update := range updateCh {
+	return nil
+}
+
+func (c *Client) messageListen() {
+	for update := range c.updateMessageCh {
 		if update.Message == nil && update.CallbackQuery != nil {
-			if err := c.processCallbackRequest(update.CallbackQuery); err != nil {
+			if err := c.processPollAnswer(update.CallbackQuery); err != nil {
 				log.Printf("prccess callback error: %s", err)
 				continue
 			}
@@ -112,7 +118,7 @@ func (c *Client) init(token string) error {
 				continue
 			}
 
-			if err := c.processInlineRequest(update.InlineQuery); err != nil {
+			if err := c.postPoll(update.InlineQuery); err != nil {
 				log.Printf("proccess inline query failed: %s", err)
 			}
 		}
@@ -130,7 +136,7 @@ func (c *Client) init(token string) error {
 			switch strings.ToLower(update.Message.Command()) {
 			case "help":
 				msg := tgbot.NewMessage(update.Message.Chat.ID, "")
-				msg.ParseMode = parseMode
+				msg.ParseMode = string(parseMode)
 				msg.Text = "use this command for help"
 				c.bot.Send(msg)
 				continue
@@ -160,7 +166,7 @@ func (c *Client) init(token string) error {
 				polls.Delete(userID(update.Message.From.ID))
 
 				msg := tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Poll created. Use `@%s %s`", c.botName, poll.pollName))
-				msg.ParseMode = parseMode
+				msg.ParseMode = string(parseMode)
 				c.bot.Send(msg)
 				continue
 			case "newpoll":
@@ -196,13 +202,11 @@ func (c *Client) init(token string) error {
 				items = append(prestoredPoll.items, update.Message.Text)
 				polls.Store(userID(update.Message.From.ID), &poll{pollName: prestoredPoll.pollName, items: items, owner: getOwner(update.Message.From.ID, update.Message.From.String())})
 				msg := tgbot.NewMessage(update.Message.Chat.ID, "- put items;\n- `/done` - to complete the poll creation;\n- `/cancel` - to cancel the poll creation")
-				msg.ParseMode = parseMode
+				msg.ParseMode = string(parseMode)
 				c.bot.Send(msg)
 			}
 		}
 	}
-
-	return nil
 }
 
 func (c Client) userHasAccess(userID int) bool {
@@ -215,7 +219,7 @@ func (c Client) userHasAccess(userID int) bool {
 	return false
 }
 
-func (c Client) processInlineRequest(inline *tgbot.InlineQuery) error {
+func (c Client) postPoll(inline *tgbot.InlineQuery) error {
 	if len(inline.Query) <= 3 {
 		return nil
 	}
@@ -248,7 +252,7 @@ func (c Client) processInlineRequest(inline *tgbot.InlineQuery) error {
 	return nil
 }
 
-func (c Client) processCallbackRequest(callback *tgbot.CallbackQuery) error {
+func (c Client) processPollAnswer(callback *tgbot.CallbackQuery) error {
 	callbackData, err := serializeCallbackData(callback.Data)
 	if err != nil {
 		return errors.Wrap(err, "get callback data error")
@@ -273,7 +277,7 @@ func (c Client) processCallbackRequest(callback *tgbot.CallbackQuery) error {
 		return errors.Wrap(err, "answer callback error")
 	}
 
-	c.pollUpdateCh <- map[inlineMessageID]*updatedPoll{
+	c.updatePollCh <- map[inlineMessageID]*updatedPoll{
 		inlineMessageID(callback.InlineMessageID): {
 			voter: callback.From.String(),
 			poll:  poll,
