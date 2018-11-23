@@ -23,8 +23,9 @@ type store interface {
 }
 
 const (
-	isDebug   = true
-	parseMode = markdownParseMode
+	isDebug        = true
+	parseMode      = markdownParseMode
+	maximumAnswers = 3
 )
 
 var (
@@ -198,9 +199,15 @@ func (c *Client) messageListen() {
 					continue
 				}
 
-				items := make([]string, 0)
-				items = append(prestoredPoll.items, update.Message.Text)
-				polls.Store(userID(update.Message.From.ID), &poll{pollName: prestoredPoll.pollName, items: items, owner: getOwner(update.Message.From.ID, update.Message.From.String())})
+				if len(prestoredPoll.items) == maximumAnswers {
+					msg := tgbot.NewMessage(update.Message.Chat.ID, "Maximum 3 items could be placed! Use:\n- `/done` - to complete the poll creation;\n- `/cancel` - to cancel the poll creation")
+					msg.ParseMode = string(parseMode)
+					c.bot.Send(msg)
+					continue
+				}
+
+				prestoredPoll.items = append(prestoredPoll.items, update.Message.Text)
+				polls.Store(userID(update.Message.From.ID), &poll{pollName: prestoredPoll.pollName, items: prestoredPoll.items, owner: getOwner(update.Message.From.ID, update.Message.From.String())})
 				msg := tgbot.NewMessage(update.Message.Chat.ID, "- put items;\n- `/done` - to complete the poll creation;\n- `/cancel` - to cancel the poll creation")
 				msg.ParseMode = string(parseMode)
 				c.bot.Send(msg)
