@@ -62,6 +62,10 @@ func getOwner(id int, name string) string {
 	return fmt.Sprintf("(%d) %s", id, name)
 }
 
+func stringToPtr(s string) *string {
+	return &s
+}
+
 func escapeURLMarkdownSymbols(msg string) string {
 	if !strings.Contains(msg, "http://") && !strings.Contains(msg, "https://") {
 		return msg

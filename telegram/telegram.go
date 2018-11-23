@@ -166,8 +166,18 @@ func (c *Client) messageListen() {
 
 				polls.Delete(userID(update.Message.From.ID))
 
-				msg := tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Poll created. Use `@%s %s`", c.botName, poll.pollName))
+				msg := tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Use `share button` or put the next lines into your group: `@%s %s`", c.botName, poll.pollName))
 				msg.ParseMode = string(parseMode)
+				msg.ReplyMarkup = &tgbot.InlineKeyboardMarkup{
+					InlineKeyboard: [][]tgbot.InlineKeyboardButton{
+						{
+							{
+								Text:              "Share to group",
+								SwitchInlineQuery: stringToPtr(poll.pollName),
+							},
+						},
+					},
+				}
 				c.bot.Send(msg)
 				continue
 			case "newpoll":
