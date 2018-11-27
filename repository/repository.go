@@ -2,6 +2,7 @@ package repository
 
 import (
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -55,14 +56,14 @@ func (r *Repository) GetPoll(pollName string) (*domain.Poll, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	return r.getPoll(pollName)
+	return r.getPoll(strings.TrimSpace(pollName))
 }
 
 func (r *Repository) GetPollBeginsWith(pollName string) (*domain.Poll, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	item, err := r.db.GetPollBeginsWith(pollName)
+	item, err := r.db.GetPollBeginsWith(strings.TrimSpace(pollName))
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get a poll by name")
 	}
@@ -83,7 +84,7 @@ func (r *Repository) CreatePoll(pollName, owner string, items []string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	storedPoll, err := r.getPoll(pollName)
+	storedPoll, err := r.getPoll(strings.TrimSpace(pollName))
 	if err != nil && errors.Cause(err) != ErrPollIsNotFound {
 		return errors.Wrap(err, "create poll failed")
 	}
@@ -94,7 +95,7 @@ func (r *Repository) CreatePoll(pollName, owner string, items []string) error {
 
 	poll := &domain.Poll{
 		CreatedAt: time.Now().UnixNano(),
-		Subject:   pollName,
+		Subject:   strings.TrimSpace(pollName),
 		Items:     items,
 		Votes:     map[string][]string{},
 		CreatedBy: owner,
@@ -112,7 +113,7 @@ func (r *Repository) DeletePoll(pollName, owner string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	result, err := r.db.GetPollByOwner(pollName, owner)
+	result, err := r.db.GetPollByOwner(strings.TrimSpace(pollName), owner)
 	if err != nil {
 		return err
 	}
@@ -126,14 +127,14 @@ func (r *Repository) DeletePoll(pollName, owner string) error {
 		return err
 	}
 
-	return r.db.DeletePoll(pollName, poll.CreatedAt)
+	return r.db.DeletePoll(strings.TrimSpace(pollName), poll.CreatedAt)
 }
 
 func (r *Repository) UpdatePollIsPublished(pollName, owner string, isPublished bool) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	result, err := r.db.GetPollByOwner(pollName, owner)
+	result, err := r.db.GetPollByOwner(strings.TrimSpace(pollName), owner)
 	if err != nil {
 		return err
 	}
@@ -147,14 +148,14 @@ func (r *Repository) UpdatePollIsPublished(pollName, owner string, isPublished b
 		return err
 	}
 
-	return r.db.UpdateIsPublish(pollName, poll.CreatedAt, isPublished)
+	return r.db.UpdateIsPublish(strings.TrimSpace(pollName), poll.CreatedAt, isPublished)
 }
 
 func (r *Repository) UpdatePollItems(pollName, owner string, items []string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	result, err := r.db.GetPollByOwner(pollName, owner)
+	result, err := r.db.GetPollByOwner(strings.TrimSpace(pollName), owner)
 	if err != nil {
 		return err
 	}
@@ -168,7 +169,7 @@ func (r *Repository) UpdatePollItems(pollName, owner string, items []string) err
 		return err
 	}
 
-	return r.db.UpdateItems(pollName, poll.CreatedAt, items)
+	return r.db.UpdateItems(strings.TrimSpace(pollName), poll.CreatedAt, items)
 }
 
 func (r *Repository) UpdateVote(createdAt int64, item, voter string) (*domain.Poll, error) {
