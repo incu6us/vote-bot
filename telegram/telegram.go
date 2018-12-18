@@ -5,13 +5,11 @@ import (
 	"log"
 	"strings"
 
-	"github.com/incu6us/vote-bot/telegram/polls_cache"
-
-	"github.com/incu6us/vote-bot/telegram/models"
-
 	tgbot "github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/incu6us/vote-bot/domain"
 	"github.com/incu6us/vote-bot/repository"
+	"github.com/incu6us/vote-bot/telegram/models"
+	"github.com/incu6us/vote-bot/telegram/polls_cache"
 	"github.com/pkg/errors"
 )
 
@@ -174,62 +172,26 @@ func (c *Client) messageListen() {
 			if update.Message.IsCommand() {
 				switch strings.ToLower(update.Message.Command()) {
 				case "help":
-					// msg := tgbot.NewMessage(update.Message.Chat.ID, "")
-					// msg.ParseMode = string(parseMode)
-					// msg.Text = "use this command for help"
-					// c.bot.Send(msg)
-					c.sendHelp(update.Message.Chat.ID)
-					continue
+					if err := c.cmdHelp(update.Message.Chat.ID); err != nil {
+						log.Printf("command help: %s\n", err)
+					}
 				case "cancel":
-					c.pollsStore.Delete(models.UserID(update.Message.From.ID))
-					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "Canceled"))
-					continue
+					if err := c.cmdCancel(update.Message.Chat.ID, update.Message.From.ID); err != nil {
+						log.Printf("command cancel: %s\n", err)
+					}
 				case "done":
-					poll := c.pollsStore.Load(models.UserID(update.Message.From.ID))
-					if poll == nil {
-						c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "No such poll"))
-						continue
+					if err := c.cmdDone(update.Message.Chat.ID, update.Message.From.ID); err != nil {
+						log.Printf("command done: %s\n", err)
 					}
-
-					if poll.PollName == "" || len(poll.Items) == 0 {
-						c.pollsStore.Delete(models.UserID(update.Message.From.ID))
-						c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "Poll name and items should be set. Try again to create a new poll"))
-						continue
-					}
-
-					if err := c.store.CreatePoll(poll.PollName, poll.Owner, poll.Items); err != nil {
-						c.pollsStore.Delete(models.UserID(update.Message.From.ID))
-						c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Poll creation error: %s", err)))
-						continue
-					}
-
-					c.pollsStore.Delete(models.UserID(update.Message.From.ID))
-
-					msg := tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Use `share button` or put the next lines into your group: `@%s %s`", c.botName, poll.PollName))
-					msg.ParseMode = string(parseMode)
-					msg.ReplyMarkup = &tgbot.InlineKeyboardMarkup{
-						InlineKeyboard: [][]tgbot.InlineKeyboardButton{
-							{
-								{
-									Text:              "Share with group",
-									SwitchInlineQuery: stringToPtr(poll.PollName),
-								},
-							},
-						},
-					}
-					c.bot.Send(msg)
-					continue
 				case "newpoll":
-					if prestoredPoll := c.pollsStore.Load(models.UserID(update.Message.From.ID)); prestoredPoll == nil {
-						c.pollsStore.Store(models.UserID(update.Message.From.ID), &models.Poll{Owner: getOwner(update.Message.From.ID, update.Message.From.String())})
+					if err := c.cmdNewPoll(update.Message.Chat.ID, update.Message.From.ID, update.Message.From.String()); err != nil {
+						log.Printf("command newpoll: %s\n", err)
 					}
-					msg := tgbot.NewMessage(update.Message.Chat.ID, "Enter a poll name")
-					c.bot.Send(msg)
-					continue
 				default:
 					msg := tgbot.NewMessage(update.Message.Chat.ID, "Bad command")
-					c.bot.Send(msg)
-					continue
+					if _, err := c.bot.Send(msg); err != nil {
+						log.Println("send message error")
+					}
 				}
 			} else {
 				log.Printf("MESSAGE %+v", update.Message)
