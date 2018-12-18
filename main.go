@@ -7,6 +7,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/incu6us/vote-bot/cache"
+
 	"github.com/aws/aws-sdk-go/aws/awserr"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
 	cfg "github.com/incu6us/vote-bot/config"
@@ -89,7 +91,7 @@ func main() {
 		}
 	}
 
-	bot, err := telegram.New(telegramToken, botName, userIDs, repo)
+	bot, err := telegram.New(cache.NewStore(), repo, telegramToken, botName, userIDs...)
 	if err != nil {
 		log.Printf("bot creation error: %s\n", err)
 		return

@@ -22,14 +22,16 @@ type store interface {
 	UpdateVote(createdAt int64, item, user string) (*domain.Poll, error)
 }
 
+type tmpStore interface {
+	Load(key userID) *poll
+	Store(key userID, value *poll)
+	Delete(key userID)
+}
+
 const (
 	isDebug        = true
 	parseMode      = markdownParseMode
 	maximumAnswers = 3
-)
-
-var (
-	polls = newPollsMemStore()
 )
 
 type inlineMessageID string
@@ -38,14 +40,23 @@ type Client struct {
 	botName         string
 	secureUserIDs   []int
 	bot             *tgbot.BotAPI
+	pollsStore      tmpStore
 	store           store
 	updatePollCh    chan map[inlineMessageID]*updatedPoll
 	updateMessageCh tgbot.UpdatesChannel
 	shutdownCh      chan struct{}
 }
 
-func New(token, botName string, userIDs []int, store store) (*Client, error) {
-	client := &Client{botName: botName, secureUserIDs: userIDs, store: store, updatePollCh: make(chan map[inlineMessageID]*updatedPoll), shutdownCh: make(chan struct{}, 1)}
+func New(tmpStore pollsStoreInterface, store store, token, botName string, userIDs ...int) (*Client, error) {
+	client := &Client{
+		botName: botName,
+
+		secureUserIDs: userIDs,
+		pollsStore:    newPollsStore(tmpStore),
+		store:         store,
+		updatePollCh:  make(chan map[inlineMessageID]*updatedPoll),
+		shutdownCh:    make(chan struct{}, 1),
+	}
 	if err := client.login(token); err != nil {
 		return nil, err
 	}
@@ -145,35 +156,36 @@ func (c *Client) messageListen() {
 			if update.Message.IsCommand() {
 				switch strings.ToLower(update.Message.Command()) {
 				case "help":
-					msg := tgbot.NewMessage(update.Message.Chat.ID, "")
-					msg.ParseMode = string(parseMode)
-					msg.Text = "use this command for help"
-					c.bot.Send(msg)
+					// msg := tgbot.NewMessage(update.Message.Chat.ID, "")
+					// msg.ParseMode = string(parseMode)
+					// msg.Text = "use this command for help"
+					// c.bot.Send(msg)
+					c.sendHelp(update.Message.Chat.ID)
 					continue
 				case "cancel":
-					polls.Delete(userID(update.Message.From.ID))
+					c.pollsStore.Delete(userID(update.Message.From.ID))
 					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "Canceled"))
 					continue
 				case "done":
-					poll := polls.Load(userID(update.Message.From.ID))
+					poll := c.pollsStore.Load(userID(update.Message.From.ID))
 					if poll == nil {
 						c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "No such poll"))
 						continue
 					}
 
 					if poll.pollName == "" || len(poll.items) == 0 {
-						polls.Delete(userID(update.Message.From.ID))
+						c.pollsStore.Delete(userID(update.Message.From.ID))
 						c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "Poll name and items should be set. Try again to create a new poll"))
 						continue
 					}
 
 					if err := c.store.CreatePoll(poll.pollName, poll.owner, poll.items); err != nil {
-						polls.Delete(userID(update.Message.From.ID))
+						c.pollsStore.Delete(userID(update.Message.From.ID))
 						c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Poll creation error: %s", err)))
 						continue
 					}
 
-					polls.Delete(userID(update.Message.From.ID))
+					c.pollsStore.Delete(userID(update.Message.From.ID))
 
 					msg := tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Use `share button` or put the next lines into your group: `@%s %s`", c.botName, poll.pollName))
 					msg.ParseMode = string(parseMode)
@@ -190,8 +202,8 @@ func (c *Client) messageListen() {
 					c.bot.Send(msg)
 					continue
 				case "newpoll":
-					if prestoredPoll := polls.Load(userID(update.Message.From.ID)); prestoredPoll == nil {
-						polls.Store(userID(update.Message.From.ID), &poll{owner: getOwner(update.Message.From.ID, update.Message.From.String())})
+					if prestoredPoll := c.pollsStore.Load(userID(update.Message.From.ID)); prestoredPoll == nil {
+						c.pollsStore.Store(userID(update.Message.From.ID), &poll{owner: getOwner(update.Message.From.ID, update.Message.From.String())})
 					}
 					msg := tgbot.NewMessage(update.Message.Chat.ID, "Enter a poll name")
 					c.bot.Send(msg)
@@ -211,9 +223,9 @@ func (c *Client) messageListen() {
 					continue
 				}
 
-				if prestoredPoll := polls.Load(userID(update.Message.From.ID)); prestoredPoll != nil {
+				if prestoredPoll := c.pollsStore.Load(userID(update.Message.From.ID)); prestoredPoll != nil {
 					if prestoredPoll.pollName == "" {
-						polls.Store(userID(update.Message.From.ID), &poll{pollName: update.Message.Text, items: []string{}, owner: getOwner(update.Message.From.ID, update.Message.From.String())})
+						c.pollsStore.Store(userID(update.Message.From.ID), &poll{pollName: update.Message.Text, items: []string{}, owner: getOwner(update.Message.From.ID, update.Message.From.String())})
 						c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "put items"))
 						continue
 					}
@@ -226,7 +238,7 @@ func (c *Client) messageListen() {
 					}
 
 					prestoredPoll.items = append(prestoredPoll.items, update.Message.Text)
-					polls.Store(userID(update.Message.From.ID), &poll{pollName: prestoredPoll.pollName, items: prestoredPoll.items, owner: getOwner(update.Message.From.ID, update.Message.From.String())})
+					c.pollsStore.Store(userID(update.Message.From.ID), &poll{pollName: prestoredPoll.pollName, items: prestoredPoll.items, owner: getOwner(update.Message.From.ID, update.Message.From.String())})
 					msg := tgbot.NewMessage(update.Message.Chat.ID, "- put items;\n- `/done` - to complete the poll creation;\n- `/cancel` - to cancel the poll creation")
 					msg.ParseMode = string(parseMode)
 					c.bot.Send(msg)
