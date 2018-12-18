@@ -1,7 +1,9 @@
-package telegram
+package polls_cache
 
 import (
 	"testing"
+
+	"github.com/incu6us/vote-bot/telegram/models"
 
 	"github.com/stretchr/testify/assert"
 
@@ -14,11 +16,11 @@ func Test_pollsStore_Store_Load(t *testing.T) {
 	}
 	type want struct {
 		userID int
-		poll   *poll
+		poll   *models.Poll
 	}
 	type args struct {
-		key  userID
-		poll *poll
+		key  models.UserID
+		poll *models.Poll
 	}
 	tests := []struct {
 		name   string
@@ -30,13 +32,13 @@ func Test_pollsStore_Store_Load(t *testing.T) {
 			name:   "success",
 			fields: struct{ tmpStore pollsStoreInterface }{tmpStore: cache.NewStore()},
 			args: struct {
-				key  userID
-				poll *poll
-			}{key: 1234, poll: &poll{pollName: "test poll", owner: "me", items: []string{"first item"}}},
+				key  models.UserID
+				poll *models.Poll
+			}{key: 1234, poll: &models.Poll{PollName: "test poll", Owner: "me", Items: []string{"first item"}}},
 			want: struct {
 				userID int
-				poll   *poll
-			}{userID: 1234, poll: &poll{pollName: "test poll", owner: "me", items: []string{"first item"}}},
+				poll   *models.Poll
+			}{userID: 1234, poll: &models.Poll{PollName: "test poll", Owner: "me", Items: []string{"first item"}}},
 		},
 	}
 	for _, tt := range tests {
@@ -45,7 +47,7 @@ func Test_pollsStore_Store_Load(t *testing.T) {
 				store: tt.fields.tmpStore,
 			}
 			p.Store(tt.args.key, tt.args.poll)
-			assert.Equal(t, p.Load(userID(tt.want.userID)), tt.want.poll)
+			assert.Equal(t, p.Load(models.UserID(tt.want.userID)), tt.want.poll)
 		})
 	}
 }
@@ -55,11 +57,11 @@ func Test_pollsStore_Delete(t *testing.T) {
 		tmpStore pollsStoreInterface
 	}
 	type prestoredVal struct {
-		userID userID
-		poll   *poll
+		userID models.UserID
+		poll   *models.Poll
 	}
 	type args struct {
-		key userID
+		key models.UserID
 	}
 	tests := []struct {
 		name         string
@@ -69,12 +71,12 @@ func Test_pollsStore_Delete(t *testing.T) {
 	}{
 		{
 			name:   "success",
-			args:   struct{ key userID }{key: userID(1234)},
+			args:   struct{ key models.UserID }{key: models.UserID(1234)},
 			fields: struct{ tmpStore pollsStoreInterface }{tmpStore: cache.NewStore()},
 			prestoredVal: struct {
-				userID userID
-				poll   *poll
-			}{userID: userID(1234), poll: &poll{pollName: "test poll", owner: "me", items: []string{"first item"}}},
+				userID models.UserID
+				poll   *models.Poll
+			}{userID: models.UserID(1234), poll: &models.Poll{PollName: "test poll", Owner: "me", Items: []string{"first item"}}},
 		},
 	}
 	for _, tt := range tests {

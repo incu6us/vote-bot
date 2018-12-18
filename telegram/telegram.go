@@ -5,6 +5,10 @@ import (
 	"log"
 	"strings"
 
+	"github.com/incu6us/vote-bot/telegram/polls_cache"
+
+	"github.com/incu6us/vote-bot/telegram/models"
+
 	tgbot "github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/incu6us/vote-bot/domain"
 	"github.com/incu6us/vote-bot/repository"
@@ -22,11 +26,25 @@ type store interface {
 	UpdateVote(createdAt int64, item, user string) (*domain.Poll, error)
 }
 
-type tmpStore interface {
-	Load(key userID) *poll
-	Store(key userID, value *poll)
-	Delete(key userID)
+type rawCacheInterface interface {
+	Load(key string) interface{}
+	Store(key string, value interface{})
+	Delete(key string)
 }
+
+type pollCacheInterface interface {
+	Load(key models.UserID) *models.Poll
+	Store(key models.UserID, value *models.Poll)
+	Delete(key models.UserID)
+}
+
+type parseModeType string
+
+const (
+	markdownParseMode parseModeType = "markdown"
+	htmlParseMode                   = "html"
+	noneParseMode                   = ""
+)
 
 const (
 	isDebug        = true
@@ -40,21 +58,21 @@ type Client struct {
 	botName         string
 	secureUserIDs   []int
 	bot             *tgbot.BotAPI
-	pollsStore      tmpStore
+	pollsStore      pollCacheInterface
 	store           store
-	updatePollCh    chan map[inlineMessageID]*updatedPoll
+	updatePollCh    chan map[inlineMessageID]*models.UpdatedPoll
 	updateMessageCh tgbot.UpdatesChannel
 	shutdownCh      chan struct{}
 }
 
-func New(tmpStore pollsStoreInterface, store store, token, botName string, userIDs ...int) (*Client, error) {
+func New(cache rawCacheInterface, store store, token, botName string, userIDs ...int) (*Client, error) {
 	client := &Client{
 		botName: botName,
 
 		secureUserIDs: userIDs,
-		pollsStore:    newPollsStore(tmpStore),
+		pollsStore:    polls_cache.NewPollsStore(cache),
 		store:         store,
-		updatePollCh:  make(chan map[inlineMessageID]*updatedPoll),
+		updatePollCh:  make(chan map[inlineMessageID]*models.UpdatedPoll),
 		shutdownCh:    make(chan struct{}, 1),
 	}
 	if err := client.login(token); err != nil {
@@ -97,7 +115,7 @@ func (c *Client) updatePollAnswers() {
 	for update := range c.updatePollCh {
 		for inlineMessageID, updatedPoll := range update {
 			var votes string
-			for k, values := range updatedPoll.poll.Votes {
+			for k, values := range updatedPoll.Poll.Votes {
 				votes += "\n- " + k + ":\n"
 				for _, v := range values {
 					votes += "\t\t\t\t" + v + "\n"
@@ -107,9 +125,9 @@ func (c *Client) updatePollAnswers() {
 			editMsg := tgbot.EditMessageTextConfig{
 				BaseEdit: tgbot.BaseEdit{
 					InlineMessageID: string(inlineMessageID),
-					ReplyMarkup:     preparePollKeyboardMarkup(updatedPoll.poll),
+					ReplyMarkup:     preparePollKeyboardMarkup(updatedPoll.Poll),
 				},
-				Text:      fmt.Sprintf("%s\n---\nLast Vote: %s\nVotes: \n```%s```", escapeURLMarkdownSymbols(updatedPoll.poll.Subject), updatedPoll.voter, votes),
+				Text:      fmt.Sprintf("%s\n---\nLast Vote: %s\nVotes: \n```%s```", escapeURLMarkdownSymbols(updatedPoll.Poll.Subject), updatedPoll.Voter, votes),
 				ParseMode: string(parseMode),
 			}
 
@@ -163,38 +181,38 @@ func (c *Client) messageListen() {
 					c.sendHelp(update.Message.Chat.ID)
 					continue
 				case "cancel":
-					c.pollsStore.Delete(userID(update.Message.From.ID))
+					c.pollsStore.Delete(models.UserID(update.Message.From.ID))
 					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "Canceled"))
 					continue
 				case "done":
-					poll := c.pollsStore.Load(userID(update.Message.From.ID))
+					poll := c.pollsStore.Load(models.UserID(update.Message.From.ID))
 					if poll == nil {
 						c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "No such poll"))
 						continue
 					}
 
-					if poll.pollName == "" || len(poll.items) == 0 {
-						c.pollsStore.Delete(userID(update.Message.From.ID))
+					if poll.PollName == "" || len(poll.Items) == 0 {
+						c.pollsStore.Delete(models.UserID(update.Message.From.ID))
 						c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "Poll name and items should be set. Try again to create a new poll"))
 						continue
 					}
 
-					if err := c.store.CreatePoll(poll.pollName, poll.owner, poll.items); err != nil {
-						c.pollsStore.Delete(userID(update.Message.From.ID))
+					if err := c.store.CreatePoll(poll.PollName, poll.Owner, poll.Items); err != nil {
+						c.pollsStore.Delete(models.UserID(update.Message.From.ID))
 						c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Poll creation error: %s", err)))
 						continue
 					}
 
-					c.pollsStore.Delete(userID(update.Message.From.ID))
+					c.pollsStore.Delete(models.UserID(update.Message.From.ID))
 
-					msg := tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Use `share button` or put the next lines into your group: `@%s %s`", c.botName, poll.pollName))
+					msg := tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Use `share button` or put the next lines into your group: `@%s %s`", c.botName, poll.PollName))
 					msg.ParseMode = string(parseMode)
 					msg.ReplyMarkup = &tgbot.InlineKeyboardMarkup{
 						InlineKeyboard: [][]tgbot.InlineKeyboardButton{
 							{
 								{
 									Text:              "Share with group",
-									SwitchInlineQuery: stringToPtr(poll.pollName),
+									SwitchInlineQuery: stringToPtr(poll.PollName),
 								},
 							},
 						},
@@ -202,8 +220,8 @@ func (c *Client) messageListen() {
 					c.bot.Send(msg)
 					continue
 				case "newpoll":
-					if prestoredPoll := c.pollsStore.Load(userID(update.Message.From.ID)); prestoredPoll == nil {
-						c.pollsStore.Store(userID(update.Message.From.ID), &poll{owner: getOwner(update.Message.From.ID, update.Message.From.String())})
+					if prestoredPoll := c.pollsStore.Load(models.UserID(update.Message.From.ID)); prestoredPoll == nil {
+						c.pollsStore.Store(models.UserID(update.Message.From.ID), &models.Poll{Owner: getOwner(update.Message.From.ID, update.Message.From.String())})
 					}
 					msg := tgbot.NewMessage(update.Message.Chat.ID, "Enter a poll name")
 					c.bot.Send(msg)
@@ -223,22 +241,22 @@ func (c *Client) messageListen() {
 					continue
 				}
 
-				if prestoredPoll := c.pollsStore.Load(userID(update.Message.From.ID)); prestoredPoll != nil {
-					if prestoredPoll.pollName == "" {
-						c.pollsStore.Store(userID(update.Message.From.ID), &poll{pollName: update.Message.Text, items: []string{}, owner: getOwner(update.Message.From.ID, update.Message.From.String())})
+				if prestoredPoll := c.pollsStore.Load(models.UserID(update.Message.From.ID)); prestoredPoll != nil {
+					if prestoredPoll.PollName == "" {
+						c.pollsStore.Store(models.UserID(update.Message.From.ID), &models.Poll{PollName: update.Message.Text, Items: []string{}, Owner: getOwner(update.Message.From.ID, update.Message.From.String())})
 						c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "put items"))
 						continue
 					}
 
-					if len(prestoredPoll.items) == maximumAnswers {
+					if len(prestoredPoll.Items) == maximumAnswers {
 						msg := tgbot.NewMessage(update.Message.Chat.ID, "Maximum 3 items could be placed! Use:\n- `/done` - to complete the poll creation;\n- `/cancel` - to cancel the poll creation")
 						msg.ParseMode = string(parseMode)
 						c.bot.Send(msg)
 						continue
 					}
 
-					prestoredPoll.items = append(prestoredPoll.items, update.Message.Text)
-					c.pollsStore.Store(userID(update.Message.From.ID), &poll{pollName: prestoredPoll.pollName, items: prestoredPoll.items, owner: getOwner(update.Message.From.ID, update.Message.From.String())})
+					prestoredPoll.Items = append(prestoredPoll.Items, update.Message.Text)
+					c.pollsStore.Store(models.UserID(update.Message.From.ID), &models.Poll{PollName: prestoredPoll.PollName, Items: prestoredPoll.Items, Owner: getOwner(update.Message.From.ID, update.Message.From.String())})
 					msg := tgbot.NewMessage(update.Message.Chat.ID, "- put items;\n- `/done` - to complete the poll creation;\n- `/cancel` - to cancel the poll creation")
 					msg.ParseMode = string(parseMode)
 					c.bot.Send(msg)
@@ -316,10 +334,10 @@ func (c Client) processPollAnswer(callback *tgbot.CallbackQuery) error {
 		return errors.Wrap(err, "answer callback error")
 	}
 
-	c.updatePollCh <- map[inlineMessageID]*updatedPoll{
+	c.updatePollCh <- map[inlineMessageID]*models.UpdatedPoll{
 		inlineMessageID(callback.InlineMessageID): {
-			voter: callback.From.String(),
-			poll:  poll,
+			Voter: callback.From.String(),
+			Poll:  poll,
 		},
 	}
 

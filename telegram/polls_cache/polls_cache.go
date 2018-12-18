@@ -1,6 +1,10 @@
-package telegram
+package polls_cache
 
-import "strconv"
+import (
+	"strconv"
+
+	"github.com/incu6us/vote-bot/telegram/models"
+)
 
 type pollsStoreInterface interface {
 	Load(key string) interface{}
@@ -12,22 +16,22 @@ type pollsStore struct {
 	store pollsStoreInterface
 }
 
-func newPollsStore(store pollsStoreInterface) *pollsStore {
+func NewPollsStore(store pollsStoreInterface) *pollsStore {
 	return &pollsStore{store: store}
 }
 
-func (p pollsStore) Load(key userID) *poll {
+func (p pollsStore) Load(key models.UserID) *models.Poll {
 	if val := p.store.Load(strconv.Itoa(int(key))); val != nil {
-		return val.(*poll)
+		return val.(*models.Poll)
 	}
 
 	return nil
 }
 
-func (p *pollsStore) Store(key userID, poll *poll) {
+func (p *pollsStore) Store(key models.UserID, poll *models.Poll) {
 	p.store.Store(strconv.Itoa(int(key)), poll)
 }
 
-func (p *pollsStore) Delete(key userID) {
+func (p *pollsStore) Delete(key models.UserID) {
 	p.store.Delete(strconv.Itoa(int(key)))
 }

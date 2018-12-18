@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/incu6us/vote-bot/telegram/models"
+
 	tgbot "github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/incu6us/vote-bot/domain"
 	"github.com/pkg/errors"
@@ -41,12 +43,12 @@ func preparePollKeyboardMarkup(poll *domain.Poll) *tgbot.InlineKeyboardMarkup {
 
 // TODO: add FFJSON
 func prepareCallbackData(createdAt int64, vote string) string {
-	data, _ := json.Marshal(callbackData{CreatedAt: createdAt, Vote: vote})
+	data, _ := json.Marshal(models.CallbackData{CreatedAt: createdAt, Vote: vote})
 	return string(data)
 }
 
-func serializeCallbackData(data string) (*callbackData, error) {
-	callbackData := new(callbackData)
+func serializeCallbackData(data string) (*models.CallbackData, error) {
+	callbackData := new(models.CallbackData)
 	if err := json.Unmarshal([]byte(data), callbackData); err != nil {
 		return nil, errors.Wrap(err, "serialize callback data error")
 	}
