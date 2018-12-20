@@ -1,4 +1,4 @@
-vote-bot
+vote-bot [![Build Status](https://travis-ci.org/incu6us/vote-bot.svg?branch=master)](https://travis-ci.org/incu6us/vote-bot)
 ---
 
 Telegram bot for voting based on AWS DynamoDB
