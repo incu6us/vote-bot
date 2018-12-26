@@ -156,7 +156,7 @@ func (db DB) GetPollByCreatedAt(createdAt int64) (*dynamodb.ScanOutput, error) {
 		},
 	})
 	if err != nil {
-		return nil, errors.Wrapf(err, "get poll with created_at field '%s' error", createdAt)
+		return nil, errors.Wrapf(err, "get poll with created_at field '%d' error", createdAt)
 	}
 
 	return result, nil

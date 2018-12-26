@@ -5,6 +5,7 @@ require (
 	github.com/aws/aws-sdk-go v1.15.74
 	github.com/davecgh/go-spew v1.1.1
 	github.com/go-telegram-bot-api/telegram-bot-api v4.6.4+incompatible
+	github.com/magiconair/properties v1.8.0
 	github.com/pkg/errors v0.8.0
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/spf13/viper v1.2.1

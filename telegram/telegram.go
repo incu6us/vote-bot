@@ -8,6 +8,8 @@ import (
 	tgbot "github.com/go-telegram-bot-api/telegram-bot-api"
 	"github.com/incu6us/vote-bot/domain"
 	"github.com/incu6us/vote-bot/repository"
+	"github.com/incu6us/vote-bot/telegram/models"
+	"github.com/incu6us/vote-bot/telegram/polls_cache"
 	"github.com/pkg/errors"
 )
 
@@ -22,14 +24,30 @@ type store interface {
 	UpdateVote(createdAt int64, item, user string) (*domain.Poll, error)
 }
 
+type rawCacheInterface interface {
+	Load(key string) interface{}
+	Store(key string, value interface{})
+	Delete(key string)
+}
+
+type pollCacheInterface interface {
+	Load(key models.UserID) *models.Poll
+	Store(key models.UserID, value *models.Poll)
+	Delete(key models.UserID)
+}
+
+type parseModeType string
+
+const (
+	markdownParseMode parseModeType = "markdown"
+	htmlParseMode                   = "html"
+	noneParseMode                   = ""
+)
+
 const (
 	isDebug        = true
 	parseMode      = markdownParseMode
 	maximumAnswers = 3
-)
-
-var (
-	polls = newPollsMemStore()
 )
 
 type inlineMessageID string
@@ -38,14 +56,23 @@ type Client struct {
 	botName         string
 	secureUserIDs   []int
 	bot             *tgbot.BotAPI
+	pollsStore      pollCacheInterface
 	store           store
-	updatePollCh    chan map[inlineMessageID]*updatedPoll
+	updatePollCh    chan map[inlineMessageID]*models.UpdatedPoll
 	updateMessageCh tgbot.UpdatesChannel
 	shutdownCh      chan struct{}
 }
 
-func New(token, botName string, userIDs []int, store store) (*Client, error) {
-	client := &Client{botName: botName, secureUserIDs: userIDs, store: store, updatePollCh: make(chan map[inlineMessageID]*updatedPoll), shutdownCh: make(chan struct{}, 1)}
+func New(cache rawCacheInterface, store store, token, botName string, userIDs ...int) (*Client, error) {
+	client := &Client{
+		botName: botName,
+
+		secureUserIDs: userIDs,
+		pollsStore:    polls_cache.NewPollsStore(cache),
+		store:         store,
+		updatePollCh:  make(chan map[inlineMessageID]*models.UpdatedPoll),
+		shutdownCh:    make(chan struct{}, 1),
+	}
 	if err := client.login(token); err != nil {
 		return nil, err
 	}
@@ -86,7 +113,7 @@ func (c *Client) updatePollAnswers() {
 	for update := range c.updatePollCh {
 		for inlineMessageID, updatedPoll := range update {
 			var votes string
-			for k, values := range updatedPoll.poll.Votes {
+			for k, values := range updatedPoll.Poll.Votes {
 				votes += "\n- " + k + ":\n"
 				for _, v := range values {
 					votes += "\t\t\t\t" + v + "\n"
@@ -96,9 +123,9 @@ func (c *Client) updatePollAnswers() {
 			editMsg := tgbot.EditMessageTextConfig{
 				BaseEdit: tgbot.BaseEdit{
 					InlineMessageID: string(inlineMessageID),
-					ReplyMarkup:     preparePollKeyboardMarkup(updatedPoll.poll),
+					ReplyMarkup:     preparePollKeyboardMarkup(updatedPoll.Poll),
 				},
-				Text:      fmt.Sprintf("%s\n---\nLast Vote: %s\nVotes: \n```%s```", escapeURLMarkdownSymbols(updatedPoll.poll.Subject), updatedPoll.voter, votes),
+				Text:      fmt.Sprintf("%s\n---\nLast Vote: %s\nVotes: \n```%s```", escapeURLMarkdownSymbols(updatedPoll.Poll.Subject), updatedPoll.Voter, votes),
 				ParseMode: string(parseMode),
 			}
 
@@ -115,16 +142,18 @@ func (c *Client) messageListen() {
 		case <-c.shutdownCh:
 			return
 		case update := <-c.updateMessageCh:
-			if update.Message == nil && update.CallbackQuery != nil {
+			if update.CallbackQuery != nil {
 				if err := c.processPollAnswer(update.CallbackQuery); err != nil {
 					log.Printf("prccess callback error: %s", err)
 					continue
 				}
 			}
 
-			if update.Message == nil && update.InlineQuery != nil {
+			if update.InlineQuery != nil {
 				if !c.userHasAccess(update.InlineQuery.From.ID) {
-					c.bot.Send(tgbot.NewMessage(int64(update.InlineQuery.From.ID), msgYouHaveNoAccess(int64(update.InlineQuery.From.ID))))
+					if _, err := c.bot.Send(tgbot.NewMessage(int64(update.InlineQuery.From.ID), msgYouHaveNoAccess(int64(update.InlineQuery.From.ID)))); err != nil {
+						log.Printf("failed to send ID to blocked user: %s", err)
+					}
 					continue
 				}
 
@@ -137,99 +166,48 @@ func (c *Client) messageListen() {
 				continue
 			}
 
+			if update.Message.NewChatMembers != nil || update.Message.LeftChatMember != nil || strings.TrimSpace(update.Message.Text) == "" {
+				continue
+			}
+
 			if update.Message.Chat != nil && !c.userHasAccess(update.Message.From.ID) {
-				c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, msgYouHaveNoAccess(update.Message.Chat.ID)))
+				if _, err := c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, msgYouHaveNoAccess(update.Message.Chat.ID))); err != nil {
+					log.Printf("send message failed for blocked user: %s", err)
+				}
 				continue
 			}
 
 			if update.Message.IsCommand() {
 				switch strings.ToLower(update.Message.Command()) {
 				case "help":
-					msg := tgbot.NewMessage(update.Message.Chat.ID, "")
-					msg.ParseMode = string(parseMode)
-					msg.Text = "use this command for help"
-					c.bot.Send(msg)
-					continue
+					if err := c.cmdHelp(update.Message.Chat.ID); err != nil {
+						log.Printf("command help: %s\n", err)
+					}
 				case "cancel":
-					polls.Delete(userID(update.Message.From.ID))
-					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "Canceled"))
-					continue
+					if err := c.cmdCancel(update.Message.Chat.ID, update.Message.From.ID); err != nil {
+						log.Printf("command cancel: %s\n", err)
+					}
 				case "done":
-					poll := polls.Load(userID(update.Message.From.ID))
-					if poll == nil {
-						c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "No such poll"))
-						continue
+					if err := c.cmdDone(update.Message.Chat.ID, update.Message.From.ID); err != nil {
+						log.Printf("command done: %s\n", err)
 					}
-
-					if poll.pollName == "" || len(poll.items) == 0 {
-						polls.Delete(userID(update.Message.From.ID))
-						c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "Poll name and items should be set. Try again to create a new poll"))
-						continue
-					}
-
-					if err := c.store.CreatePoll(poll.pollName, poll.owner, poll.items); err != nil {
-						polls.Delete(userID(update.Message.From.ID))
-						c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Poll creation error: %s", err)))
-						continue
-					}
-
-					polls.Delete(userID(update.Message.From.ID))
-
-					msg := tgbot.NewMessage(update.Message.Chat.ID, fmt.Sprintf("Use `share button` or put the next lines into your group: `@%s %s`", c.botName, poll.pollName))
-					msg.ParseMode = string(parseMode)
-					msg.ReplyMarkup = &tgbot.InlineKeyboardMarkup{
-						InlineKeyboard: [][]tgbot.InlineKeyboardButton{
-							{
-								{
-									Text:              "Share with group",
-									SwitchInlineQuery: stringToPtr(poll.pollName),
-								},
-							},
-						},
-					}
-					c.bot.Send(msg)
-					continue
 				case "newpoll":
-					if prestoredPoll := polls.Load(userID(update.Message.From.ID)); prestoredPoll == nil {
-						polls.Store(userID(update.Message.From.ID), &poll{owner: getOwner(update.Message.From.ID, update.Message.From.String())})
+					if err := c.cmdNewPoll(update.Message.Chat.ID, update.Message.From.ID, update.Message.From.String()); err != nil {
+						log.Printf("command newpoll: %s\n", err)
 					}
-					msg := tgbot.NewMessage(update.Message.Chat.ID, "Enter a poll name")
-					c.bot.Send(msg)
-					continue
 				default:
 					msg := tgbot.NewMessage(update.Message.Chat.ID, "Bad command")
-					c.bot.Send(msg)
-					continue
-				}
-			} else {
-				log.Printf("MESSAGE %+v", update.Message)
-				if update.Message.NewChatMembers != nil || update.Message.LeftChatMember != nil {
-					continue
-				}
-				if strings.TrimSpace(update.Message.Text) == "" {
-					c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "message is empty"))
-					continue
-				}
-
-				if prestoredPoll := polls.Load(userID(update.Message.From.ID)); prestoredPoll != nil {
-					if prestoredPoll.pollName == "" {
-						polls.Store(userID(update.Message.From.ID), &poll{pollName: update.Message.Text, items: []string{}, owner: getOwner(update.Message.From.ID, update.Message.From.String())})
-						c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "put items"))
-						continue
+					if _, err := c.bot.Send(msg); err != nil {
+						log.Println("send message error")
 					}
+				}
+				continue
+			}
 
-					if len(prestoredPoll.items) == maximumAnswers {
-						msg := tgbot.NewMessage(update.Message.Chat.ID, "Maximum 3 items could be placed! Use:\n- `/done` - to complete the poll creation;\n- `/cancel` - to cancel the poll creation")
-						msg.ParseMode = string(parseMode)
-						c.bot.Send(msg)
-						continue
-					}
-
-					prestoredPoll.items = append(prestoredPoll.items, update.Message.Text)
-					polls.Store(userID(update.Message.From.ID), &poll{pollName: prestoredPoll.pollName, items: prestoredPoll.items, owner: getOwner(update.Message.From.ID, update.Message.From.String())})
-					msg := tgbot.NewMessage(update.Message.Chat.ID, "- put items;\n- `/done` - to complete the poll creation;\n- `/cancel` - to cancel the poll creation")
-					msg.ParseMode = string(parseMode)
-					c.bot.Send(msg)
+			log.Printf("MESSAGE %+v", update.Message)
+			if preStoredPoll := c.pollsStore.Load(models.UserID(update.Message.From.ID)); preStoredPoll != nil {
+				if err := c.createOrCompletePoll(update, preStoredPoll); err != nil {
+					log.Printf("create or comple a poll error: %s", err)
 				}
 			}
 		}
@@ -304,11 +282,42 @@ func (c Client) processPollAnswer(callback *tgbot.CallbackQuery) error {
 		return errors.Wrap(err, "answer callback error")
 	}
 
-	c.updatePollCh <- map[inlineMessageID]*updatedPoll{
+	c.updatePollCh <- map[inlineMessageID]*models.UpdatedPoll{
 		inlineMessageID(callback.InlineMessageID): {
-			voter: callback.From.String(),
-			poll:  poll,
+			Voter: callback.From.String(),
+			Poll:  poll,
 		},
+	}
+
+	return nil
+}
+
+func (c Client) createOrCompletePoll(update tgbot.Update, preStoredPoll *models.Poll) error {
+	if preStoredPoll.PollName == "" {
+		c.pollsStore.Store(models.UserID(update.Message.From.ID), &models.Poll{PollName: update.Message.Text, Items: []string{}, Owner: getOwner(update.Message.From.ID, update.Message.From.String())})
+		if _, err := c.bot.Send(tgbot.NewMessage(update.Message.Chat.ID, "put items")); err != nil {
+			return errors.Wrap(err, sendMessageErrorString)
+		}
+
+		return nil
+	}
+
+	if len(preStoredPoll.Items) == maximumAnswers {
+		msg := tgbot.NewMessage(update.Message.Chat.ID, "Maximum 3 items could be placed! Use:\n- `/done` - to complete the poll creation;\n- `/cancel` - to cancel the poll creation")
+		msg.ParseMode = string(parseMode)
+		if _, err := c.bot.Send(msg); err != nil {
+			return errors.Wrap(err, sendMessageErrorString)
+		}
+
+		return nil
+	}
+
+	preStoredPoll.Items = append(preStoredPoll.Items, update.Message.Text)
+	c.pollsStore.Store(models.UserID(update.Message.From.ID), &models.Poll{PollName: preStoredPoll.PollName, Items: preStoredPoll.Items, Owner: getOwner(update.Message.From.ID, update.Message.From.String())})
+	msg := tgbot.NewMessage(update.Message.Chat.ID, "- put items;\n- `/done` - to complete the poll creation;\n- `/cancel` - to cancel the poll creation")
+	msg.ParseMode = string(parseMode)
+	if _, err := c.bot.Send(msg); err != nil {
+		return errors.Wrap(err, sendMessageErrorString)
 	}
 
 	return nil
